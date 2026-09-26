@@ -34,7 +34,7 @@ public class Wallet {
     private BigDecimal balance = new BigDecimal("0.00");
 
     @Column(nullable = false, length = 3)
-    private String currency = "NRP";
+    private String currency = "NPR";
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
