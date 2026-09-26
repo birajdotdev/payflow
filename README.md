@@ -16,15 +16,17 @@ Implemented:
 - Login issues signed JWT access tokens; `/api/v1/auth/me` returns the current user.
 - `/api/v1/wallet` returns only the authenticated user's primary wallet.
 - Protected requests check the current account status and role in PostgreSQL.
+- Simulated deposits atomically credit the wallet and create a financial transaction.
+- Wallet row locks and persistent idempotency keys protect concurrent requests and retries.
 - Request validation and consistent JSON success/error responses.
 - PostgreSQL JDBC error details are suppressed to keep conflicting field values out
   of application error logs.
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-Deposits, transfers, financial transaction history, and the frontend are not
+Transfers, financial transaction history APIs, and the frontend are not
 implemented yet. Register first, then log in to receive an access token. Routes
-outside registration, login, current user/wallet, and API documentation are denied.
+outside registration, login, current user/wallet, deposits, and API documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
 
@@ -186,6 +188,74 @@ tokens in query parameters are not accepted. Refresh tokens and server-side logo
 are not implemented; log in again after expiry. Changing `JWT_SECRET` invalidates
 all existing tokens. Keep the same key across restarts when tokens should remain valid.
 
+## Add simulated funds
+
+`POST /api/v1/wallet/deposit` requires a bearer token and an `Idempotency-Key` header.
+The body accepts an `amount` in NPR; wallet ownership and currency come from the server.
+All account roles with an active account may fund their own wallet.
+
+```bash
+read -r -s -p 'Access token: ' PAYFLOW_ACCESS_TOKEN
+curl -sS http://localhost:8080/api/v1/wallet/deposit \
+  -H "Authorization: Bearer $PAYFLOW_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: demo-deposit-1000' \
+  -d '{"amount":1000}'
+```
+
+Repeat the same command with the same key. Starting from zero, the wallet will still
+have **NPR 1,000.00 and exactly one transaction record**. Use a new key for each intended
+deposit; preserve the key when retrying after a timeout or server error. Unset
+`PAYFLOW_ACCESS_TOKEN` when finished.
+
+Both the initial request and a matching retry return HTTP 200 with `data` containing
+`transactionId`, `reference`, `type` (`DEPOSIT`), `status` (`SUCCESS`), `walletId`,
+`amount`, `currency` (`NPR`), `balanceAfter`, and `createdAt`. References use
+`PF-<UTC year>-<UUID>` and have a database uniqueness constraint. The receipt's
+`balanceAfter` is the balance immediately after that deposit, not the current balance.
+A retry returns the original receipt even after later deposits or a wallet freeze;
+the response envelope's `timestamp` reflects the current request. Use `GET /api/v1/wallet`
+for the current balance.
+
+Rules and errors:
+
+| Rule | HTTP status / code |
+|---|---|
+| Amount must be NPR 0.01–100,000.00 inclusive, with at most two decimal places; no rounding | 400 / `INVALID_REQUEST` |
+| Key is required, case-sensitive, 1–128 ASCII letters, digits, underscores or hyphens | 400 / `INVALID_REQUEST` |
+| Same wallet and key with a different amount | 409 / `IDEMPOTENCY_CONFLICT` |
+| New deposit into a frozen wallet | 409 / `WALLET_FROZEN` |
+| Resulting simulated balance exceeds NPR 1,000,000.00 | 409 / `BALANCE_LIMIT_EXCEEDED` |
+| Missing/invalid token or unavailable account | 401 / `UNAUTHORIZED` |
+
+Amounts use `BigDecimal` and database `DECIMAL(19,2)`. Numerically equal valid amounts
+such as `1000`, `1000.0`, and `1000.00` match on retries. An amount with more than two
+decimal places, including `1.000`, is rejected. Failed validation or rolled-back
+operations do not reserve a key.
+
+### Atomicity, concurrency, and idempotency
+
+`DepositService.deposit` owns one database transaction. It acquires a PostgreSQL
+pessimistic write lock on the authenticated user's wallet **before** checking for
+an existing deposit key. Concurrent deposits to that wallet serialize across threads
+and application instances. Different wallets can proceed independently. After waiting,
+a request sees the committed receipt or can proceed if the earlier request rolled back.
+The lock remains held through balance update, financial record insertion, and commit.
+The existing wallet version column also guards against stale ORM updates.
+
+V3 creates the financial records table, including type/status checks, wallet foreign
+keys, unique references, and a unique `(receiver_wallet_id, type, idempotency_key)`
+constraint as an additional duplicate guard. Deposit receipts and keys persist together
+without expiration; keys are scoped to the wallet and deposit operation, so two users
+may independently use the same key. The validated amount is the entire caller-controlled
+financial payload, and is compared directly rather than hashed. Transaction records
+have no update/delete API. Failed deposits leave no partial financial record or balance
+change; retries after database failures can succeed with the same key.
+
+Future money-changing operations must follow the same locking discipline; transfers
+will need consistent ordering when locking two wallets. This milestone establishes
+deposit correctness, not transfer correctness.
+
 ## Test and build
 
 From `backend/`:
@@ -213,6 +283,13 @@ They cover login/profile/wallet, owner isolation, forged and expired tokens, mis
 claims, wrong issuer/audience/algorithm, current role changes, suspended/deleted
 accounts, safe errors, and secret configuration validation.
 
+Deposit integration tests use real signed tokens and PostgreSQL row locks. They cover
+NPR 1,000 plus retries, stable receipts, separate user key scopes, amount/key validation,
+concurrent duplicates, conflicting concurrent payloads, distinct concurrent deposits,
+balance limits, frozen wallets, and transaction-insert failure after flushing the balance.
+The injected failure verifies balance, version, and update timestamp rollback, preservation
+of existing records, and successful retry with the same key.
+
 `verify` also packages an executable JAR in `backend/target/`. CI runs the same
 command on a Docker-enabled GitHub-hosted runner.
 
@@ -226,16 +303,14 @@ accounts with the same email or phone. V2 adds normalized email uniqueness witho
 changing the existing V1 migration. If an existing database contains emails that
 collide after normalization, resolve those records before applying V2.
 
-The wallet already has a nonnegative balance constraint and an optimistic version
-column. Money movement and its concurrency strategy are still to be implemented;
-registration tests do not establish transfer correctness.
+The wallet has a nonnegative balance constraint and an optimistic version column.
+Deposits add pessimistic row locking as described above.
 
 Next milestones:
 
-1. Financial records and simulated deposits with atomicity and idempotency.
-2. Transfers with consistent wallet lock ordering, duplicate protection, and
+1. Transfers with consistent wallet lock ordering, duplicate protection, and
    rollback/concurrent-spending tests.
-3. Paginated transaction history and transaction details.
-4. Minimal Next.js workflow, backend container, and complete Compose setup.
+2. Paginated transaction history and transaction details.
+3. Minimal Next.js workflow, backend container, and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.

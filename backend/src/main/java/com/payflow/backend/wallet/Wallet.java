@@ -1,6 +1,8 @@
 package com.payflow.backend.wallet;
 
 import com.payflow.backend.user.User;
+import com.payflow.backend.common.exception.FinancialException;
+import org.springframework.http.HttpStatus;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -52,6 +54,20 @@ public class Wallet {
 
     public Wallet(User user) {
         this.user = Objects.requireNonNull(user, "Wallet owner is required");
+    }
+
+    void creditDeposit(BigDecimal amount) {
+        if (status != WalletStatus.ACTIVE) {
+            throw new FinancialException(
+                    HttpStatus.CONFLICT, "WALLET_FROZEN", "Wallet is frozen.");
+        }
+        BigDecimal updated = balance.add(amount);
+        if (updated.compareTo(DepositService.MAX_BALANCE) > 0) {
+            throw new FinancialException(
+                    HttpStatus.CONFLICT, "BALANCE_LIMIT_EXCEEDED",
+                    "Simulated wallet balance cannot exceed NPR 1000000.00.");
+        }
+        balance = updated;
     }
 
     @PrePersist

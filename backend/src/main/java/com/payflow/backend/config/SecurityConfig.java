@@ -39,6 +39,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/wallet")
                             .hasAnyRole("USER", "MERCHANT", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/wallet/deposit")
+                            .hasAnyRole("USER", "MERCHANT", "ADMIN")
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter))
