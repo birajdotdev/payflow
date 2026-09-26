@@ -22,6 +22,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Set<String> REGISTRATION_CONSTRAINTS = Set.of(
             "users_email_key", "users_email_normalized_key", "users_phone_key");
 
+    @ExceptionHandler(FinancialException.class)
+    ResponseEntity<ApiError> handleFinancial(FinancialException exception) {
+        return ResponseEntity.status(exception.getStatus())
+                .body(ApiError.of(exception.getCode(), exception.getMessage()));
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     ResponseEntity<ApiError> handleBadCredentials(BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
