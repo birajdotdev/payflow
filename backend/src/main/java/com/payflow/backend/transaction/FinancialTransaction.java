@@ -44,6 +44,15 @@ public class FinancialTransaction {
     @Column(name = "updated_at", nullable = false, updatable = false)
     private Instant updatedAt;
 
+    public static FinancialTransaction transfer(UUID sender, UUID receiver, BigDecimal amount,
+                                                String description, String key) {
+        var transaction = deposit(receiver, amount, key, null);
+        transaction.type = TransactionType.TRANSFER;
+        transaction.senderWalletId = sender;
+        transaction.description = description;
+        return transaction;
+    }
+
     public static FinancialTransaction deposit(UUID walletId, BigDecimal amount, String key, BigDecimal balanceAfter) {
         var transaction = new FinancialTransaction();
         transaction.id = UUID.randomUUID();
