@@ -15,5 +15,12 @@ public interface WalletRepository extends JpaRepository<Wallet, UUID> {
     @Query("select w from Wallet w where w.user.id = :userId")
     Optional<Wallet> findByUserIdForUpdate(@Param("userId") UUID userId);
 
+    @Query("select w.id from Wallet w where w.user.id = :userId")
+    Optional<UUID> findIdByUserId(@Param("userId") UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select w from Wallet w where w.id = :id")
+    Optional<Wallet> findByIdForUpdate(@Param("id") UUID id);
+
     Optional<Wallet> findByUser_Id(UUID userId);
 }

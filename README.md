@@ -17,6 +17,7 @@ Implemented:
 - `/api/v1/wallet` returns only the authenticated user's primary wallet.
 - Protected requests check the current account status and role in PostgreSQL.
 - Simulated deposits atomically credit the wallet and create a financial transaction.
+- Wallet transfers atomically debit the sender, credit the receiver, and record one transfer.
 - Wallet row locks and persistent idempotency keys protect concurrent requests and retries.
 - Request validation and consistent JSON success/error responses.
 - PostgreSQL JDBC error details are suppressed to keep conflicting field values out
@@ -24,9 +25,8 @@ Implemented:
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-Transfers, financial transaction history APIs, and the frontend are not
-implemented yet. Register first, then log in to receive an access token. Routes
-outside registration, login, current user/wallet, deposits, and API documentation are denied.
+Financial transaction history APIs and the frontend are not implemented yet. Register first, then log in to receive an access token. Routes
+outside registration, login, current user/wallet, deposits, transfers, and API documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
 
@@ -252,9 +252,62 @@ financial payload, and is compared directly rather than hashed. Transaction reco
 have no update/delete API. Failed deposits leave no partial financial record or balance
 change; retries after database failures can succeed with the same key.
 
-Future money-changing operations must follow the same locking discipline; transfers
-will need consistent ordering when locking two wallets. This milestone establishes
-deposit correctness, not transfer correctness.
+V4 replaces the deposit uniqueness constraint with a deposit-only unique index and
+adds a sender-scoped transfer key index. This preserves deposit keys while allowing
+different senders to use the same key when paying a common receiver.
+
+## Transfer simulated funds
+
+`POST /api/v1/transfers` requires bearer authentication and `Idempotency-Key`.
+The sender is always the authenticated account's wallet. All active account roles
+can transfer. For Alice's token and Bob's wallet UUID:
+
+```bash
+curl -sS http://localhost:8080/api/v1/transfers \
+  -H "Authorization: Bearer $PAYFLOW_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: alice-to-bob-300' \
+  -d '{"receiverWalletId":"<Bob wallet UUID>","amount":300,"description":"Dinner"}'
+```
+
+Starting with Alice's NPR 1,000 deposit and Bob's empty wallet, send this request
+and repeat it with the same key and payload. Alice retains **NPR 700.00**, Bob has
+**NPR 300.00**, and **one TRANSFER record** exists (in addition to the deposit).
+`GET /api/v1/wallet` with each user's token returns their current balance.
+
+The initial request and matching retries return HTTP 200. The stable `data` receipt
+contains `transactionId`, `reference`, `type` (`TRANSFER`), `status` (`SUCCESS`),
+`senderWalletId`, `receiverWalletId`, `amount`, `currency` (`NPR`), `description`,
+and `createdAt`. The envelope timestamp reflects the current request.
+
+| Rule | HTTP status / code |
+|---|---|
+| Receiver UUID required; amount NPR 0.01–1,000,000.00, at most two decimal places; optional description at most 255 characters | 400 / `INVALID_REQUEST` |
+| Same key syntax as deposits; header required | 400 / `INVALID_REQUEST` |
+| Sender and receiver are the same wallet | 400 / `SELF_TRANSFER` |
+| Receiver does not exist | 404 / `WALLET_NOT_FOUND` |
+| Sender cannot cover amount | 409 / `INSUFFICIENT_BALANCE` |
+| Either wallet is frozen | 409 / `WALLET_FROZEN` |
+| Receiver would exceed NPR 1,000,000.00 | 409 / `BALANCE_LIMIT_EXCEEDED` |
+| Existing sender transfer key with different receiver, amount, or description | 409 / `IDEMPOTENCY_CONFLICT` |
+
+Keys persist with the transfer and are scoped to the sender and transfer operation;
+deposit keys are independent. Numerically equal valid amounts match. Descriptions
+are compared exactly, including whitespace; omitted/null descriptions match each
+other, while an empty string is distinct. A matching retry returns the original
+receipt even after balances change or either wallet is frozen. Failed operations
+leave no record or reserved key, so they can be retried after the cause is resolved.
+
+`TransferService.transfer` owns a single database transaction. It looks up the
+sender's wallet ID without loading a potentially stale balance, then locks both
+wallet rows sequentially in Java UUID comparison order. Every transfer follows
+this order, including opposite-direction requests. Locks are held through the
+idempotency lookup, debit, credit, record insert, and commit. Deposits use the same
+wallet row locks, so they serialize with transfers touching that wallet. Database
+constraints additionally enforce distinct transfer wallets, positive bounded amounts,
+valid keys, and unique `(sender_wallet_id, idempotency_key)` for transfers. Both
+balances are flushed before recording the transfer; any insert failure rolls back
+both balances, wallet versions/timestamps, and the transfer key.
 
 ## Test and build
 
@@ -290,6 +343,13 @@ balance limits, frozen wallets, and transaction-insert failure after flushing th
 The injected failure verifies balance, version, and update timestamp rollback, preservation
 of existing records, and successful retry with the same key.
 
+Transfer integration tests cover the Alice/Bob acceptance milestone, stable retries,
+full-payload conflicts, sender/operation key scopes, validation, missing/self/frozen
+wallets, insufficient funds, receiver balance limits, concurrent retries, competing
+spends to different receivers, opposite-direction transfers, and database-insert
+failure after flushing both balances. Rollback assertions include both wallet
+versions and timestamps, existing records, and successful reuse of the failed key.
+
 `verify` also packages an executable JAR in `backend/target/`. CI runs the same
 command on a Docker-enabled GitHub-hosted runner.
 
@@ -308,9 +368,7 @@ Deposits add pessimistic row locking as described above.
 
 Next milestones:
 
-1. Transfers with consistent wallet lock ordering, duplicate protection, and
-   rollback/concurrent-spending tests.
-2. Paginated transaction history and transaction details.
-3. Minimal Next.js workflow, backend container, and complete Compose setup.
+1. Paginated transaction history and transaction details.
+2. Minimal Next.js workflow, backend container, and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.

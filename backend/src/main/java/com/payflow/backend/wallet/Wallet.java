@@ -70,6 +70,23 @@ public class Wallet {
         balance = updated;
     }
 
+    public void transferTo(Wallet receiver, BigDecimal amount) {
+        if (id.equals(receiver.id)) {
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "SELF_TRANSFER", "Cannot transfer to the same wallet.");
+        }
+        if (amount == null || amount.signum() <= 0 || amount.scale() > 2) {
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid transfer amount.");
+        }
+        if (status != WalletStatus.ACTIVE || receiver.status != WalletStatus.ACTIVE) {
+            throw new FinancialException(HttpStatus.CONFLICT, "WALLET_FROZEN", "Wallet is frozen.");
+        }
+        if (balance.compareTo(amount) < 0) {
+            throw new FinancialException(HttpStatus.CONFLICT, "INSUFFICIENT_BALANCE", "Insufficient wallet balance.");
+        }
+        receiver.creditDeposit(amount);
+        balance = balance.subtract(amount);
+    }
+
     @PrePersist
     public void onCreate() {
         Instant now = Instant.now();
