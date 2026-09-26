@@ -18,6 +18,7 @@ Implemented:
 - Protected requests check the current account status and role in PostgreSQL.
 - Simulated deposits atomically credit the wallet and create a financial transaction.
 - Wallet transfers atomically debit the sender, credit the receiver, and record one transfer.
+- Paginated transaction history and receipts are restricted to the authenticated wallet.
 - Wallet row locks and persistent idempotency keys protect concurrent requests and retries.
 - Request validation and consistent JSON success/error responses.
 - PostgreSQL JDBC error details are suppressed to keep conflicting field values out
@@ -25,8 +26,8 @@ Implemented:
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-Financial transaction history APIs and the frontend are not implemented yet. Register first, then log in to receive an access token. Routes
-outside registration, login, current user/wallet, deposits, transfers, and API documentation are denied.
+The frontend is not implemented yet. Register first, then log in to receive an access token. Routes
+outside registration, login, current user/wallet, deposits, transfers, transaction history/details, and API documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
 
@@ -309,6 +310,63 @@ valid keys, and unique `(sender_wallet_id, idempotency_key)` for transfers. Both
 balances are flushed before recording the transfer; any insert failure rolls back
 both balances, wallet versions/timestamps, and the transfer key.
 
+## Transaction history and receipts
+
+`GET /api/v1/transactions` lists only transactions where your wallet is the sender
+or receiver. `GET /api/v1/transactions/{id}` returns a single receipt with the same
+ownership restriction. Both endpoints require bearer authentication. These personal
+endpoints apply the same wallet scope to USER, MERCHANT, and ADMIN accounts.
+
+```bash
+curl -sS --get http://localhost:8080/api/v1/transactions \
+  -H "Authorization: Bearer $PAYFLOW_ACCESS_TOKEN" \
+  --data-urlencode 'type=TRANSFER' \
+  --data-urlencode 'status=SUCCESS' \
+  --data-urlencode 'fromDate=2026-09-01T00:00:00Z' \
+  --data-urlencode 'toDate=2026-10-01T00:00:00Z' \
+  --data-urlencode 'page=0' --data-urlencode 'size=20'
+
+curl -sS 'http://localhost:8080/api/v1/transactions/<transaction-uuid>' \
+  -H "Authorization: Bearer $PAYFLOW_ACCESS_TOKEN"
+```
+
+Replace `<transaction-uuid>` with a receipt's `transactionId` before running the
+second command. All history parameters are optional and combine with AND:
+
+| Parameter | Meaning |
+|---|---|
+| `type` | `DEPOSIT`, `TRANSFER`, `MERCHANT_PAYMENT`, or `REFUND` |
+| `status` | `PENDING`, `SUCCESS`, `FAILED`, or `REFUNDED` |
+| `fromDate` | Inclusive ISO-8601 timestamp with timezone |
+| `toDate` | Exclusive ISO-8601 timestamp with timezone; must follow `fromDate` |
+| `page` | Zero-based nonnegative page, default 0; page × size cannot exceed 2,147,483,647 |
+| `size` | 1–100, default 20 |
+
+History returns HTTP 200 with `data.content` containing receipts, plus `data.page`,
+`size`, `totalElements`, `totalPages`, and `hasNext`. Empty or out-of-range pages
+have empty content; counts include only your transactions matching the filters.
+Order is fixed: `createdAt DESC, transactionId DESC`, with the UUID breaking timestamp
+ties. Offset pagination reflects current committed data; new transactions between
+page requests can shift page boundaries.
+
+The detail endpoint returns HTTP 200 with one receipt in `data`. Each receipt has
+`transactionId`, `reference`, `type`, `status`, `senderWalletId`, `receiverWalletId`,
+`amount`, `currency`, `description`, and `createdAt`. Deposits have no sender, and
+optional descriptions can be null. Idempotency keys, account contact details, and
+wallet balances are not exposed by these endpoints.
+
+Invalid filters, date ranges, page values, or UUIDs return 400 / `INVALID_REQUEST`.
+Missing transactions and transactions belonging to another wallet both return
+404 / `TRANSACTION_NOT_FOUND`. Frozen wallets can read their history; suspended
+accounts cannot authenticate. These endpoints cannot update financial records.
+
+After the Alice/Bob transfer milestone, Alice's history shows her deposit and
+outgoing transfer, Bob's shows the incoming transfer, and both can retrieve the
+same transfer receipt. An unrelated account sees neither transaction and cannot
+retrieve either receipt. Ownership predicates run in PostgreSQL before pagination
+and counting, using the existing sender/receiver history indexes; no migration is
+needed for these read endpoints.
+
 ## Test and build
 
 From `backend/`:
@@ -350,6 +408,11 @@ spends to different receivers, opposite-direction transfers, and database-insert
 failure after flushing both balances. Rollback assertions include both wallet
 versions and timestamps, existing records, and successful reuse of the failed key.
 
+Transaction history tests verify Alice/Bob receipt visibility, unrelated and admin
+account isolation, private-field exclusion, combined filters and date boundaries,
+timezone offsets, stable ordering for timestamp ties, pagination/counts, invalid
+input, authentication/suspension, frozen-wallet reads, and financial record immutability.
+
 `verify` also packages an executable JAR in `backend/target/`. CI runs the same
 command on a Docker-enabled GitHub-hosted runner.
 
@@ -368,7 +431,7 @@ Deposits add pessimistic row locking as described above.
 
 Next milestones:
 
-1. Paginated transaction history and transaction details.
-2. Minimal Next.js workflow, backend container, and complete Compose setup.
+1. Minimal Next.js workflow for registration, login, funding, transfers, and history.
+2. Backend container and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
