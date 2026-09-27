@@ -1,0 +1,8 @@
+packages: []
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  msw: false
+overrides:
+  '@types/react': 19.3.0
+  '@types/react-dom': 19.3.0
