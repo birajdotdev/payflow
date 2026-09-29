@@ -1,30 +1,23 @@
-import { defineConfig, lazyPlugins } from "vite-plus";
-import { devtools } from "@tanstack/devtools-vite";
-
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-
-import viteReact from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+import tailwindcss from "@tailwindcss/vite"
+import { devtools } from "@tanstack/devtools-vite"
+import { tanstackRouter } from "@tanstack/router-plugin/vite"
+import viteReact from "@vitejs/plugin-react"
+import { defineConfig, lazyPlugins } from "vite-plus"
 
 const config = defineConfig({
   lint: {
-    "plugins": [
-      "oxc",
-      "typescript",
-      "unicorn",
-      "import"
-    ],
-    "categories": {
-      "correctness": "warn"
+    plugins: ["oxc", "typescript", "unicorn", "import"],
+    categories: {
+      correctness: "warn",
     },
-    "options": {
-      "typeAware": true,
-      "typeCheck": true
+    options: {
+      typeAware: true,
+      typeCheck: true,
     },
-    "env": {
-      "builtin": true
+    env: {
+      builtin: true,
     },
-    "ignorePatterns": [
+    ignorePatterns: [
       "**/.nx/**",
       "**/.svelte-kit/**",
       "**/build/**",
@@ -33,17 +26,15 @@ const config = defineConfig({
       "**/snap/**",
       "**/vite.config.*.timestamp-*.*",
       "eslint.config.js",
-      "prettier.config.js"
+      "prettier.config.js",
     ],
-    "rules": {
-      "vite-plus/prefer-vite-plus-imports": "error"
+    rules: {
+      "vite-plus/prefer-vite-plus-imports": "error",
     },
-    "overrides": [
+    overrides: [
       {
-        "files": [
-          "**/*.{js,ts,tsx}"
-        ],
-        "rules": {
+        files: ["**/*.{js,ts,tsx}"],
+        rules: {
           "for-direction": "error",
           "no-async-promise-executor": "error",
           "no-case-declarations": "error",
@@ -89,7 +80,7 @@ const config = defineConfig({
           "valid-typeof": "error",
           "import/consistent-type-specifier-style": [
             "error",
-            "prefer-top-level"
+            "prefer-top-level",
           ],
           "import/first": "error",
           "import/newline-after-import": "error",
@@ -98,35 +89,32 @@ const config = defineConfig({
           "typescript/array-type": [
             "error",
             {
-              "default": "generic",
-              "readonly": "generic"
-            }
+              default: "generic",
+              readonly: "generic",
+            },
           ],
           "typescript/ban-ts-comment": [
             "error",
             {
               "ts-expect-error": false,
-              "ts-ignore": "allow-with-description"
-            }
+              "ts-ignore": "allow-with-description",
+            },
           ],
           "typescript/consistent-type-imports": [
             "error",
             {
-              "prefer": "type-imports"
-            }
+              prefer: "type-imports",
+            },
           ],
-          "typescript/method-signature-style": [
-            "error",
-            "property"
-          ],
+          "typescript/method-signature-style": ["error", "property"],
           "typescript/no-duplicate-enum-values": "error",
           "typescript/no-extra-non-null-assertion": "error",
           "typescript/no-for-in-array": "error",
           "typescript/no-inferrable-types": [
             "error",
             {
-              "ignoreParameters": true
-            }
+              ignoreParameters: true,
+            },
           ],
           "typescript/no-misused-new": "error",
           "typescript/no-namespace": "error",
@@ -138,19 +126,17 @@ const config = defineConfig({
           "typescript/prefer-as-const": "error",
           "typescript/prefer-for-of": "warn",
           "typescript/require-await": "warn",
-          "typescript/triple-slash-reference": "error"
+          "typescript/triple-slash-reference": "error",
         },
-        "jsPlugins": [],
-        "env": {
-          "es2020": true,
-          "browser": true
-        }
+        jsPlugins: [],
+        env: {
+          es2020: true,
+          browser: true,
+        },
       },
       {
-        "files": [
-          "**/*.vue"
-        ],
-        "rules": {
+        files: ["**/*.vue"],
+        rules: {
           "for-direction": "error",
           "no-async-promise-executor": "error",
           "no-case-declarations": "error",
@@ -196,7 +182,7 @@ const config = defineConfig({
           "valid-typeof": "error",
           "import/consistent-type-specifier-style": [
             "error",
-            "prefer-top-level"
+            "prefer-top-level",
           ],
           "import/first": "error",
           "import/newline-after-import": "error",
@@ -205,35 +191,32 @@ const config = defineConfig({
           "typescript/array-type": [
             "error",
             {
-              "default": "generic",
-              "readonly": "generic"
-            }
+              default: "generic",
+              readonly: "generic",
+            },
           ],
           "typescript/ban-ts-comment": [
             "error",
             {
               "ts-expect-error": false,
-              "ts-ignore": "allow-with-description"
-            }
+              "ts-ignore": "allow-with-description",
+            },
           ],
           "typescript/consistent-type-imports": [
             "error",
             {
-              "prefer": "type-imports"
-            }
+              prefer: "type-imports",
+            },
           ],
-          "typescript/method-signature-style": [
-            "error",
-            "property"
-          ],
+          "typescript/method-signature-style": ["error", "property"],
           "typescript/no-duplicate-enum-values": "error",
           "typescript/no-extra-non-null-assertion": "error",
           "typescript/no-for-in-array": "error",
           "typescript/no-inferrable-types": [
             "error",
             {
-              "ignoreParameters": true
-            }
+              ignoreParameters: true,
+            },
           ],
           "typescript/no-misused-new": "error",
           "typescript/no-namespace": "error",
@@ -245,27 +228,34 @@ const config = defineConfig({
           "typescript/prefer-as-const": "error",
           "typescript/prefer-for-of": "warn",
           "typescript/require-await": "warn",
-          "typescript/triple-slash-reference": "error"
+          "typescript/triple-slash-reference": "error",
         },
-        "jsPlugins": [],
-        "env": {
-          "browser": true
-        }
-      }
+        jsPlugins: [],
+        env: {
+          browser: true,
+        },
+      },
     ],
-    "jsPlugins": [
+    jsPlugins: [
       {
-        "name": "vite-plus",
-        "specifier": "vite-plus/oxlint-plugin"
-      }
-    ]
+        name: "vite-plus",
+        specifier: "vite-plus/oxlint-plugin",
+      },
+    ],
   },
   fmt: {
+    endOfLine: "lf",
     semi: false,
-    singleQuote: true,
-    trailingComma: "all",
+    singleQuote: false,
+    tabWidth: 2,
+    trailingComma: "es5",
     printWidth: 80,
     sortPackageJson: false,
+    sortTailwindcss: {
+      stylesheet: "src/styles.css",
+      functions: ["cn", "cva"],
+    },
+    sortImports: true,
     ignorePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
   },
   resolve: { tsconfigPaths: true },
@@ -275,6 +265,6 @@ const config = defineConfig({
     tanstackRouter({ target: "react", autoCodeSplitting: true }),
     viteReact(),
   ]),
-});
+})
 
-export default config;
+export default config
