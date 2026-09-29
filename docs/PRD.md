@@ -2,13 +2,16 @@
 
 ## PayFlow — Digital Wallet & Payment Platform
 
-**Document Version:** 1.0  
+**Document Version:** 1.2\
+**Last Updated:** 2026-09-30\
 **Product Type:** Fintech / Digital Wallet Platform  
 **Primary Objective:** Portfolio and learning project demonstrating production-oriented Java Spring Boot backend development  
 **Target Platform:** Web  
-**Frontend:** Next.js + TypeScript  
+**Frontend:** React + TypeScript SPA, TanStack Router, Vite+ (Vite-based toolchain)\
 **Backend:** Java 21 + Spring Boot  
 **Database:** PostgreSQL  
+
+**Architecture decision:** The browser renders the application and calls the Spring Boot REST API. Vite+ supplies frontend development, checks, tests, and production builds. Spring Boot owns authentication, authorization, business logic, and persistence. Sections 31–36 and 41 define the integration; section 55 tracks the transition from the existing scaffold.
 
 ---
 
@@ -118,6 +121,8 @@ The following are outside the MVP scope:
 - Production banking infrastructure
 - Real-money deposits or withdrawals
 - PCI-DSS-compliant card handling
+- Server-side rendering, React Server Components, and frontend server functions
+- Search-engine optimization requiring server-rendered application pages
 
 These may be represented through simulated workflows where appropriate.
 
@@ -269,6 +274,17 @@ Successful authentication shall return:
 
 JWT shall be used for authenticated API requests.
 
+For the SPA MVP:
+
+- Send access tokens using `Authorization: Bearer <token>` to the PayFlow API.
+- Keep the access token in browser memory only. On a full reload, a new tab, or access-token expiry, attempt session restoration using the refresh-token cookie before requiring login (FR-04).
+- Use the login response's `accessToken`, `tokenType`, `expiresIn`, `expiresAt`, and `user`. Use `GET /api/v1/auth/me` to obtain the current profile and role when revalidating an active session.
+- Logout revokes the current login session on the backend and clears its cookie. The frontend clears the access token, user state, and private query/route caches and notifies other tabs. Existing access JWTs for that session are rejected on subsequent authentication checks.
+- A protected API response of `401` may trigger one coordinated refresh attempt, unless the session is already known to be invalid. If refresh returns `401`, clear private state and redirect to login. A `403` displays an access-denied or CSRF-error state without a refresh loop. Network failures display a recoverable error rather than being treated as invalid credentials.
+- After login, return to a validated internal route that the user attempted to open. Never use an arbitrary external redirect URL.
+
+Login and refresh return the same access-token/user response shape. The raw refresh token is set only through `Set-Cookie`, never included in JSON or made readable to JavaScript.
+
 ---
 
 ## FR-03 — Authorization
@@ -282,6 +298,37 @@ Role-based access shall restrict operations according to:
 - ADMIN
 
 Users shall not access another user's private wallet or transaction information.
+
+---
+
+## FR-04 — Refresh Tokens and Login Sessions
+
+Refresh sessions are part of the MVP. This is first-party PayFlow authentication, not a new OAuth authorization server. Rotation and replay handling follow the principles in [RFC 9700, refresh-token protection](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.14).
+
+### Token and Session Lifecycle
+
+- Successful login creates a database-backed session and a cryptographically random opaque refresh token with at least 256 bits of entropy. Store only its cryptographic hash; the refresh token is not a JWT and cannot authenticate business API requests.
+- Keep the access JWT lifetime configurable, defaulting to 15 minutes. Each JWT contains a `sid` identifying its login session. Its expiry must not exceed the session's current expiry.
+- Default session limits are a 7-day absolute lifetime from login and a 24-hour refresh inactivity timeout, both configurable. These are PayFlow defaults, not standards. Successful refresh resets the inactivity deadline, capped by the original absolute deadline; it never extends the absolute lifetime.
+- Every protected request validates the JWT and checks that its session exists, belongs to the JWT subject, is unexpired/unrevoked, and belongs to an active account. Continue using the current database role. Fail closed if session validity cannot be established; do not cache authorization in a way that delays revocation.
+- Access tokens without a valid `sid`, including tokens issued before this change, require login again. Ordinary API calls do not extend session deadlines.
+
+### Rotation and Revocation
+
+- Refresh uses the cookie without requiring or sending an access JWT. Validate the token hash, current account status, and session deadlines; atomically consume the token and create its replacement in one database transaction. Serialize changes to the same session so concurrent requests cannot create multiple valid successors.
+- Retain consumed-token hashes and their session relationship until the session's absolute expiry, so reuse can be detected. Presenting a consumed token revokes that entire login session/token family, including the currently active refresh token, and returns `401`. The revocation must commit even though the request returns an authentication error.
+- The MVP uses strict single-use rotation without a replay grace period. Duplicate use, including a client retry after a lost response, can force login again. A failed database transaction must leave the original token usable; a committed rotation with a lost response cannot be assumed to have rolled back.
+- Logout revokes the session identified by a recognized refresh cookie, including a retained consumed token, then clears the cookie. Logout is idempotent; absent, unknown, or already-revoked cookies still produce a successful cookie-clearing response after CSRF checks.
+- Suspension revokes all of the account's sessions when that feature is implemented; subsequent reactivation must not revive them. Password reset/change must do the same when introduced. Ordinary logout affects only the current session; session-list and logout-all endpoints are outside this change.
+- Immediate revocation means authentication checks after the revocation transaction commits reject access JWTs for that session. It does not undo already-authorized, in-flight financial operations.
+
+### Browser Session Behavior
+
+- Restore authentication on app startup before protected route loaders run. A successful refresh restores the current user and an in-memory access token; a missing/expired/revoked session requires login. Preserve a validated internal return URL.
+- Coordinate refresh, login, and logout across same-origin tabs so only one session mutation is in flight. Ignore late refresh responses after logout or an account switch, and clear old-user caches before displaying the new account.
+- Disable automatic transport retries for refresh. Treat network loss as an uncertain outcome, with explicit recovery or login; never repeatedly replay a potentially consumed token.
+- After a successful refresh, a failed read may retry once. A financial mutation may retry only when authentication rejection is known to precede execution and the original payload and idempotency key are preserved. Network-ambiguous financial outcomes follow section 14; never automatically replay a mutation after interactive login.
+- If logout cannot reach the server, clear local private state but report that server-side logout is unconfirmed and allow retry. Do not silently restore that session while logout remains pending.
 
 ---
 
@@ -462,6 +509,8 @@ Only one transfer shall occur.
 Subsequent requests shall return the previously generated result.
 
 This protects against accidental duplicate payments.
+
+The SPA shall generate one key per intended deposit, transfer, or payment and reuse that key and payload for retries. Disable duplicate submissions while a request is pending. A timeout represents an unknown outcome: do not report failure or issue a new key until the original operation has been reconciled. Financial mutations must never run from route loaders or navigation prefetching.
 
 ---
 
@@ -770,6 +819,8 @@ Merchant
 PaymentRequest
 IdempotencyKey
 AuditLog
+AuthSession
+RefreshToken
 ```
 
 Suggested relationships:
@@ -779,7 +830,9 @@ User
  │
  ├── 1:1 ── Wallet
  │
- └── N:1 ── Role
+ ├── N:1 ── Role
+ │
+ └── 1:N ── AuthSession ── 1:N ── RefreshToken
 
 Wallet
  │
@@ -907,6 +960,37 @@ created_at
 
 ---
 
+## auth_sessions
+
+```text
+id                         # JWT sid and refresh-token family identifier
+user_id
+created_at
+absolute_expires_at
+idle_expires_at
+last_refreshed_at
+revoked_at
+revocation_reason
+```
+
+## refresh_tokens
+
+```text
+id
+session_id
+token_hash                 # unique; never the raw token
+created_at
+expires_at
+consumed_at
+replaced_by_token_id
+```
+
+Add these tables through a new Flyway migration, with foreign keys, unique token hashes, and indexes for user sessions, token lookup, and expiry cleanup. Enforce at most one unconsumed token per session; the session itself determines whether that token is still authorized. Session locking, rotation, and logout must share the same transaction discipline. Cleanup must retain the token history needed for reuse detection throughout the absolute session lifetime.
+
+The authentication change requires these new tables; existing financial tables remain unchanged.
+
+---
+
 # 28. API Design
 
 Base API:
@@ -920,8 +1004,22 @@ Authentication:
 ```text
 POST /auth/register
 POST /auth/login
+POST /auth/refresh
+POST /auth/logout
 GET  /auth/me
 ```
+
+| Endpoint | Request authentication | Successful result |
+|---|---|---|
+| `POST /api/v1/auth/register` | Registration JSON and authentication-flow CSRF checks | Existing registration response; does not start a session |
+| `POST /api/v1/auth/login` | Email/password JSON and CSRF checks | `200`: existing access-token/user envelope plus refresh cookie; starts a session |
+| `POST /api/v1/auth/refresh` | Refresh cookie and CSRF checks; no access JWT required | `200`: new access-token/user envelope plus rotated refresh cookie |
+| `POST /api/v1/auth/logout` | Refresh cookie when present and CSRF checks; no access JWT required | `200`: standard success envelope with `data: null`; revokes current session and clears cookie |
+| `GET /api/v1/auth/me` | Access JWT and active session | Existing current-profile response |
+
+Refresh and logout have no request body. Invalid, expired, revoked, or reused refresh credentials return a generic JSON `401 UNAUTHORIZED`; clear the refresh cookie on this definitive failure. CSRF rejection returns `403 FORBIDDEN` without rotating or revoking a session. Unexpected server failures return the standard error envelope, not an authentication failure. Login/refresh responses and all session responses use `Cache-Control: no-store`. OpenAPI shall document both new endpoints, cookie behavior, required headers, and errors.
+
+Only refresh and logout are new endpoints. Section 36 specifies a required custom-header CSRF defense, so no separate CSRF-bootstrap endpoint is needed.
 
 Wallet:
 
@@ -1070,6 +1168,34 @@ com.payflow
 
 Feature-oriented modules are preferred over placing the entire application into global `controller`, `service`, and `repository` packages.
 
+## 31.1 Browser and API Responsibilities
+
+```text
+Browser: React SPA + TanStack Router + TanStack Query
+       │ HTTPS /api/v1 requests with bearer token
+       ▼
+Reverse proxy / hosting layer
+       ├── /api/* → Spring Boot → PostgreSQL
+       └── App routes and assets → frontend/dist
+```
+
+The frontend is a separately built static application. It has no application server, server actions, or API route handlers. Route loaders execute in the browser and use the REST API. TanStack Start is not part of this architecture.
+
+Spring Boot remains the sole authority for identity, roles, ownership, validation, balances, idempotency, and transaction outcomes. Client route guards improve navigation but cannot grant access to data. Business API contracts remain unchanged. Refresh sessions add the authentication endpoints and tables in sections 27–28; these are an authentication enhancement alongside the SPA transition.
+
+Business APIs continue to use bearer headers. Authentication flows use a refresh cookie backed by PostgreSQL session records. Java HTTP sessions, Redis, and a separate authentication service are not required; `SessionCreationPolicy.STATELESS` can remain for servlet sessions, but authentication now includes database-backed session state.
+
+## 31.2 API Connectivity and Conditional Backend Changes
+
+The default deployment shall expose the SPA and `/api/v1` on the same browser origin. The frontend API base URL defaults to `/api/v1`.
+
+- During development, serve the SPA at `http://localhost:3000` and proxy `/api` to Spring Boot at `http://localhost:8080`, preserving the complete request path. Configure this in `frontend/vite.config.ts` using Vite's `server.proxy` option. This configuration applies to development; production requires its own proxy rules. See [Vite server proxy documentation](https://vite.dev/config/server-options.html#server-proxy).
+- In production, the hosting layer must forward `/api/*` to Spring Boot before applying the SPA fallback. Preserve HTTP methods, request bodies, `Authorization`, `Content-Type`, `Idempotency-Key`, `X-PayFlow-CSRF`, `Origin`/`Referer`, and `Cookie`, plus backend status codes, JSON responses, and every `Set-Cookie` header. Do not cache authentication responses or strip cookie security attributes.
+- Same-origin browser requests do not require backend CORS changes. If the browser calls a separate API origin, configure exact allowed frontend origins and enable CORS in Spring Security. Process valid preflight requests before authentication; allow the required API methods and request headers (`Authorization`, `Content-Type`, `Idempotency-Key`, `X-PayFlow-CSRF`). Authentication requests must use `credentials: 'include'`, and their responses must allow credentials for the exact approved origin, never `*`. See [Spring Security CORS integration](https://docs.spring.io/spring-security/reference/servlet/integrations/cors.html).
+- Keep API authentication failures as JSON `401`/`403` responses. Spring Boot must not redirect API callers to an HTML login page or serve the SPA for failed API requests.
+
+Extend the authentication module with session/token entities, repositories, a refresh-session service, and a shared access-JWT issuer used by login and refresh. Update the security filter chain and current JWT authentication converter to enforce session validity as well as current account status/role. Add configurable session lifetimes, cookie settings, and trusted browser origins. Existing wallet, deposit, transfer, transaction, and financial repository logic remains unchanged. New merchant and admin APIs remain feature work in their existing phases.
+
 ---
 
 # 32. Technology Stack
@@ -1077,15 +1203,32 @@ Feature-oriented modules are preferred over placing the entire application into 
 ## Frontend
 
 ```text
-Next.js
-React
+React SPA
 TypeScript
+TanStack Router
+Vite+ (Vite, Rolldown, Vitest, Oxlint, Oxfmt, and task tooling)
 Tailwind CSS
 shadcn/ui
 TanStack Query
 React Hook Form
 Zod
 ```
+
+Vite+ is the frontend toolchain; React provides rendering, TanStack Router provides browser routing, and TanStack Query manages remote API state. Keep configuration in `frontend/vite.config.ts` using `defineConfig` from `vite-plus`. Use the committed pnpm lockfile and compatible, pinned runtime/toolchain versions. See [Vite+ getting started](https://viteplus.dev/guide/).
+
+Frontend commands run from `frontend/`:
+
+| Command | Purpose |
+|---|---|
+| `vp install` | Install frontend dependencies |
+| `vp run dev` | Run the project's development script on port 3000 |
+| `vp run generate-routes` | Generate the typed route tree before standalone checks |
+| `vp check` | Run formatting, lint, and TypeScript checks |
+| `vp test run` | Run frontend tests once |
+| `vp build` | Produce static assets in `dist/` |
+| `vp preview` | Preview the production build locally |
+
+Built-in commands such as `vp check` differ from package scripts invoked by `vp run check`; the scaffold's `check` script currently only checks formatting. Without the global CLI, the local CLI can be invoked through `pnpm exec vp`.
 
 ---
 
@@ -1124,6 +1267,9 @@ JUnit 5
 Mockito
 Spring Boot Test
 Testcontainers
+Vitest through Vite+
+React Testing Library
+Playwright (browser end-to-end tests)
 ```
 
 Testcontainers may run real PostgreSQL containers during integration testing.
@@ -1174,12 +1320,16 @@ postgres
 Later:
 
 ```text
-payflow-frontend
+payflow-frontend (static web server and /api reverse proxy)
 redis
 notification-service
 ```
 
 may also be containerized.
+
+When containerized, the frontend image shall build with Vite+ and copy `frontend/dist` into a static web server image. Node.js and Vite+ are build-time tools, not production serving processes. The web server shall implement the API proxy and SPA fallback described in section 35.
+
+During development, PostgreSQL/backend may run through Compose while the frontend runs locally with `vp run dev`. Frontend containerization remains a later enhancement; the MVP must document both local development and static-build serving.
 
 ---
 
@@ -1187,7 +1337,7 @@ may also be containerized.
 
 GitHub Actions shall run when code is pushed or a pull request is created.
 
-Pipeline:
+Backend pipeline:
 
 ```text
 Checkout
@@ -1205,6 +1355,30 @@ Package application
 Build Docker image
 ```
 
+Frontend pipeline:
+
+```text
+Checkout
+   ↓
+Set up pinned Node.js, pnpm, and Vite+ versions
+   ↓
+Install dependencies using the frozen pnpm lockfile
+   ↓
+Generate route tree
+   ↓
+vp check
+   ↓
+vp test run
+   ↓
+vp build
+   ↓
+Run Playwright against the built SPA, API, and test database
+   ↓
+Publish dist artifact / build frontend static-server image
+```
+
+The frontend job shall use `frontend/` as its working directory. A successful bundle build alone is not a TypeScript check. CI must generate routes before checks, run the full Vite+ check command, and verify the built application's deep links and API routing. Toolchain setup must follow the [Vite+ CI guide](https://viteplus.dev/guide/ci).
+
 Deployment automation may be added later.
 
 ---
@@ -1215,7 +1389,7 @@ A future production-like environment may use:
 
 ```text
 Frontend
-Next.js → Vercel
+React SPA → Vite+ build → static hosting (Vercel or Amazon S3 + CloudFront)
 
 Backend
 Spring Boot → AWS
@@ -1237,6 +1411,20 @@ AWS ECS
 
 AWS deployment should be treated as a later milestone rather than blocking MVP development.
 
+## Static Hosting Requirements
+
+- Deploy `frontend/dist`; no frontend Node.js application server is required. `vp preview` is for local inspection and must not be the production server. See [Vite static deployment](https://vite.dev/guide/static-deploy.html).
+- Serve `index.html` for browser navigation to app paths such as `/transactions/<id>` so direct links and reloads load TanStack Router. Unknown app paths must show the router's not-found page.
+- Route `/api/*` to Spring Boot before any HTML fallback. Missing static assets must return an asset error, and API errors must remain API responses; neither may be rewritten to `index.html`.
+- Serve the SPA and API over HTTPS. Cache fingerprinted assets for long periods and revalidate `index.html` so releases do not strand browsers on stale asset references. Do not cache private API responses in shared caches.
+- If hosting cannot provide the same-origin API proxy, use an explicit API origin and the CORS configuration from section 31.2.
+
+## Frontend Environment Configuration
+
+Use `import.meta.env.VITE_API_BASE_URL` for an optional public API base URL; default to `/api/v1`. This value is embedded at build time. Changing an environment variable on a running static server does not change an already-built bundle; rebuild when changing an embedded API URL. Same-origin deployments can reuse the relative URL across environments.
+
+All `VITE_*` variables are public browser configuration. JWT signing keys, database credentials, and other secrets must stay in the backend environment and must never enter frontend bundles. Maintain separate backend and frontend environment examples. See [Vite environment variables and modes](https://vite.dev/guide/env-and-mode.html).
+
 ---
 
 # 36. Security Requirements
@@ -1256,6 +1444,22 @@ Protected endpoints shall verify user ownership.
 Financial operations shall require authenticated users.
 
 Administrative APIs shall require the `ADMIN` role.
+
+Frontend route guards and role-based menus are not authorization boundaries. All API checks apply even when requests bypass the SPA.
+
+Do not store access or refresh tokens in `localStorage`, `sessionStorage`, URLs, or logs. Private API data must not survive logout in frontend caches. Hash refresh tokens before persistence and redact `Cookie`, `Set-Cookie`, and authorization headers from logs.
+
+## Refresh Cookie Policy
+
+Use a host-only `payflow_refresh` cookie with `HttpOnly`, `Secure`, `SameSite=Strict`, and `Path=/api/v1/auth`. Omit `Domain`; set `Max-Age` no longer than the remaining idle/absolute deadline and renew it on rotation. Clear it with the same name, path, and domain scope. Scope authentication to this cookie only at refresh/logout; possession of the cookie alone must never authorize wallet or transaction endpoints. `HttpOnly` prevents direct JavaScript reads but does not prevent malicious scripts from issuing requests. See [OWASP session-management guidance](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
+
+The default same-origin topology supports this cookie policy. Different origins on the same site still need credentialed CORS. A genuinely cross-site frontend/API deployment would require `SameSite=None; Secure` and can be disrupted by third-party-cookie blocking; prefer a same-origin proxy instead. Use local HTTPS or an explicitly local-only insecure-cookie override for HTTP development; production must require secure cookies.
+
+## CSRF Protection for Authentication Flows
+
+Require `X-PayFlow-CSRF: 1` on registration, login, refresh, and logout. Validate `Origin` against exact configured frontend origins; fall back to the parsed `Referer` origin when absent, and reject missing/untrusted origins. Reject simple form submissions; registration/login accept JSON only. The header is a mandatory non-simple-request marker, not a secret. Strict CORS preflight rules prevent an untrusted website from sending it. `SameSite` is additional protection. This uses [OWASP's custom-header CSRF defense](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#employing-custom-request-headers-for-ajaxapi).
+
+Implement these checks in the security layer before authentication-flow side effects. Retaining the current blanket CSRF disablement without this replacement is unacceptable. Bearer-only business APIs may remain exempt while they reject cookie authentication. Configure Swagger, CLI examples, and tests to send the documented custom header and trusted origin. Cross-origin permission must never be granted through wildcard/subdomain-pattern origins.
 
 ---
 
@@ -1372,37 +1576,62 @@ Database rollback after transfer failure
 
 Integration tests should verify database behavior, not only mocked service behavior.
 
+SPA and browser integration tests shall cover:
+
+- Registration, login, authenticated wallet access, deposits, transfers, history, and transaction details against the real backend in the end-to-end suite.
+- Protected-route redirects, internal return URLs, role restrictions, access-token renewal, session expiry, logout, automatic restoration after reload, and clearing private data when switching users.
+- Loading, empty, validation, `401`, `403`, and recoverable network-error states.
+- A timed-out financial request retried with the same idempotency key, producing exactly one financial operation; navigation/prefetch must never submit a financial mutation.
+- Wallet and history refresh after successful mutations, plus validated history filters and pagination through browser back/forward navigation.
+- Direct navigation and reload of a nested route in the production static-server configuration; `/api/*` and missing assets must not return SPA HTML.
+- Allowed and rejected credentialed CORS preflights if separate-origin API access is enabled, including idempotency and CSRF headers.
+
+Authentication integration tests shall additionally verify:
+
+- Login sets the correct cookie attributes and creates hashed token/session records; refresh tokens never appear in JSON responses, logs, or database plaintext.
+- Refresh works without an access JWT, rotates exactly once, returns the current role/profile, and respects both absolute and idle deadlines. Business APIs reject refresh cookies without bearer authentication.
+- Reuse commits session-family revocation and causes both current refresh tokens and previously issued access JWTs to be rejected. Logout has the same immediate access-token effect and does not revoke another independent session.
+- Expired/revoked/unknown sessions, mismatched JWT subject/session, missing `sid`, suspended accounts, and database failures cannot authorize protected requests.
+- Concurrent rotation creates at most one successor; consumed-token replay follows the strict policy. Refresh-versus-logout races cannot revive a revoked session. Rolled-back rotation preserves the original token; lost-response recovery cannot loop indefinitely.
+- Missing custom CSRF headers, untrusted/missing origins, and simple form requests are rejected before session mutations, even with a valid cookie. Successful logout remains idempotent after CSRF checks.
+- Coordinated tab refresh, session restoration, logout notifications, account switching, and late responses do not restore stale private state. Unconfirmed logout is shown accurately.
+
 ---
 
 # 41. Frontend Pages
 
-The frontend should include:
+The frontend shall use TanStack Router file-based routing with typed navigation, nested layouts, and route code splitting. Keep route files under `frontend/src/routes`, with `__root.tsx` as the root layout and `routeTree.gen.ts` generated by the router tooling. Configure `@tanstack/router-plugin/vite` before the React plugin with `target: 'react'` and `autoCodeSplitting: true`. Do not hand-edit the generated tree. See [TanStack Router installation with Vite](https://tanstack.com/router/latest/docs/installation/with-vite).
 
-```text
-Landing page
+| Page | Browser path | Access | Phase |
+|---|---|---|---|
+| Landing page | `/` | Public | MVP |
+| Register | `/register` | Public | MVP |
+| Login | `/login` | Public | MVP |
+| Dashboard | `/dashboard` | Authenticated | MVP |
+| Wallet / Add Demo Funds | `/wallet` | Authenticated | MVP |
+| Send Money | `/send` | Authenticated | MVP |
+| Transaction History | `/transactions` | Authenticated | MVP |
+| Transaction Details / Receipt | `/transactions/$transactionId` | Authenticated owner/participant | MVP |
+| Profile | `/profile` | Authenticated; view current profile | MVP |
+| Merchant Payment | `/payments/$paymentRequestId` | Authenticated eligible payer | Phase 2 |
+| Merchant Dashboard | `/merchant` | MERCHANT | Phase 2 |
+| Admin Dashboard | `/admin` | ADMIN | Phase 2 |
 
-Register
+`$transactionId` and `$paymentRequestId` denote TanStack Router path parameters. Browser paths are distinct from `/api/v1` endpoints. Merchant and admin routes follow the backend feature phases and are not required to complete the SPA migration.
 
-Login
+## Route Access and State
 
-Dashboard
+Use a pathless authenticated layout with `beforeLoad` and router context to check session state before loading protected child routes. Await one coordinated startup restoration operation rather than refreshing independently in each loader; show a pending state until it completes. Merchant and admin layouts add role checks. Re-evaluate route access when authentication changes and implement pending, error, access-denied, and not-found views. Backend authorization remains mandatory. See [TanStack Router authenticated routes](https://tanstack.com/router/latest/docs/guide/authenticated-routes).
 
-Wallet
+Keep transaction filters and pagination in validated URL search parameters: `status`, `type`, `fromDate`, `toDate`, `page`, and `size`. Match the API's zero-based pages, supported enums, page-size limits, and timestamp semantics. Bookmarks and back/forward navigation must restore the selected view after authentication.
 
-Send Money
+## API Data and Mutations
 
-Transaction History
+Use a shared typed API client for the `/api/v1` base URL, bearer headers, response envelopes, and consistent errors. Use TanStack Query for remote data and mutations; route loaders may prepare the same query cache through `queryClient.ensureQueryData`. Avoid separate competing caches for wallet/history data. See [TanStack Router external data loading](https://tanstack.com/router/latest/docs/guide/external-data-loading).
 
-Transaction Details
+Scope private query keys to the signed-in user and include relevant filters and pagination. After a successful deposit, transfer, or payment, invalidate/refetch the wallet, history, and relevant dashboard queries. Render confirmed outcomes from backend responses; do not optimistically treat a balance change as a completed financial operation. Explicitly configure financial mutation retries to follow section 14 and never silently resubmit after reauthentication.
 
-Merchant Payment
-
-Merchant Dashboard
-
-Admin Dashboard
-
-Profile
-```
+Use React Hook Form and Zod for form validation and feedback. Backend validation remains authoritative, and the browser must not recompute authoritative balances or monetary totals using floating-point arithmetic.
 
 ---
 
@@ -1529,6 +1758,9 @@ The first portfolio-ready release should contain:
 User registration
 Login
 JWT authentication
+Rotating refresh tokens and session restoration
+Server-side logout and immediate session revocation
+Authentication-flow CSRF protection
 Role-based authorization
 Wallet creation
 Simulated deposit
@@ -1545,7 +1777,7 @@ Swagger
 Unit tests
 Integration tests
 Docker Compose
-Next.js frontend
+React SPA with TanStack Router and Vite+
 Professional README
 ```
 
@@ -1675,7 +1907,7 @@ A useful architecture diagram should also be included.
 
 # 51. Suggested GitHub Description
 
-**PayFlow is a full-stack digital wallet and payment platform built with Java Spring Boot, Next.js, TypeScript and PostgreSQL, demonstrating secure authentication, transactional money transfers, idempotent payment processing, concurrency handling, testing, containerization and production-oriented backend architecture.**
+**PayFlow is a full-stack digital wallet and payment platform built with Java Spring Boot, a React and TypeScript SPA using TanStack Router and Vite+, and PostgreSQL, demonstrating secure authentication, transactional money transfers, idempotent payment processing, concurrency handling, testing, containerization and production-oriented backend architecture.**
 
 ---
 
@@ -1683,7 +1915,7 @@ A useful architecture diagram should also be included.
 
 **PayFlow — Digital Wallet & Payment Platform**
 
-Developed a full-stack fintech wallet platform using **Java Spring Boot, Next.js, TypeScript and PostgreSQL**, implementing secure JWT authentication, wallet-to-wallet transfers, transaction history and merchant payment workflows.
+Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, Vite+ and PostgreSQL**, implementing secure JWT authentication, wallet-to-wallet transfers, transaction history and merchant payment workflows.
 
 Implemented **atomic financial transactions, BigDecimal-based monetary calculations, idempotent payment requests and concurrency controls** to prevent duplicate transactions and inconsistent wallet balances.
 
@@ -1726,7 +1958,7 @@ Testing
       ↓
 Docker
       ↓
-Frontend
+React SPA + API Integration + Browser Tests
       ↓
 Merchant Payments
       ↓
@@ -1752,6 +1984,30 @@ PayFlow MVP is considered complete when a reviewer can:
 9. View updated wallet balances.
 10. View transaction history.
 11. Run the automated test suite.
-12. Use the Next.js frontend to perform the core workflow.
+12. Use the React SPA with TanStack Router to perform the core workflow.
+13. Open or reload a nested frontend URL and restore a valid session without entering credentials; sign in and return to the requested page when the session has expired.
+14. Renew an expired access token through refresh, then log out and verify that private UI/caches are cleared and the server rejects both the old access JWT and refresh token for that session.
+15. Build and serve `frontend/dist` with working SPA fallback and API forwarding, and pass frontend checks and browser tests.
+16. Reuse a consumed refresh token and verify that session-family revocation persists, then verify that expiry, CSRF checks, and concurrent refresh/logout behavior pass the authentication test suite.
 
 At that point, PayFlow will provide a strong demonstration of Java Spring Boot backend engineering, full-stack development and fintech-oriented system design.
+
+---
+
+# 55. Frontend and Authentication Transition Checklist
+
+This revision changes the target architecture and requirements; it does not claim that the application integration is already implemented.
+
+Repository review on 2026-09-30 found an existing React SPA scaffold with Vite+, TanStack Router, Tailwind CSS, and shadcn/ui. Spring Boot currently provides access-token-only bearer authentication and the core wallet/transaction APIs. Refresh sessions, refresh/logout endpoints, and session-bound JWT validation are not yet implemented. The frontend has no API proxy configured, and Spring Security has no explicit CORS integration or authentication-flow CSRF defense.
+
+| Area | Required implementation work |
+|---|---|
+| Frontend foundation | Extend the existing scaffold; add TanStack Query, React Hook Form, Zod, and frontend test dependencies/configuration. |
+| Routing and authentication | Implement the MVP route table, in-memory access tokens, cookie-backed session restoration, coordinated refresh across tabs, route guards, logout, and cache cleanup. |
+| API integration | Add the shared API client, development `/api` proxy, data loading, mutation handling, and idempotency-key lifecycle. |
+| Backend authentication | Add refresh-session/token tables through Flyway, shared JWT issuance with `sid`, refresh/logout endpoints, atomic rotation/reuse detection, immediate revocation checks, and authentication tests. Reject pre-change access JWTs lacking a valid session. |
+| Backend security | Add cookie policy, authentication-flow CSRF checks, and configurable trusted origins/lifetimes. Add credentialed CORS/preflight tests if enabling separate-origin browser access. Preserve financial API contracts and business logic. |
+| Build and hosting | Add static-server SPA fallback, production API proxy, public environment example, and frontend CI/browser tests; add a frontend container when containerizing the UI. |
+| Documentation | Update the root README's obsolete frontend plan and access-token-only authentication description, plus the frontend README's TanStack Start/server-function examples. Document session restoration, expiry/logout/reuse behavior, cookie/CSRF settings, API examples, commands, and deployment. |
+
+Completion is measured by section 54. The linked official documentation supports tooling and security principles; the same-origin API default, token/session lifetimes, strict rotation policy, immediate revocation, and phase boundaries are PayFlow design decisions. Vite+ and TanStack Router do not themselves require refresh tokens; this revision adopts refresh sessions to improve authentication continuity and session control.
