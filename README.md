@@ -2,7 +2,7 @@
 
 PayFlow is a learning and portfolio project for a digital wallet using simulated
 NPR funds. The backend uses Java 21, Spring Boot 4.1, PostgreSQL, Spring Data JPA,
-Flyway, and Spring Security. The planned frontend is Next.js.
+Flyway, and Spring Security. The frontend uses Next.js.
 
 ## Current status
 
@@ -26,7 +26,9 @@ Implemented:
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-The frontend is not implemented yet. Register first, then log in to receive an access token. Routes
+The frontend supports signup, login, logout, and the authenticated wallet dashboard.
+See [frontend setup and verification](frontend/README.md). For direct API access,
+register first, then log in to receive an access token. Routes
 outside registration, login, current user/wallet, deposits, transfers, transaction history/details, and API documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
@@ -431,7 +433,7 @@ Deposits add pessimistic row locking as described above.
 
 Next milestones:
 
-1. Minimal Next.js workflow for registration, login, funding, transfers, and history.
+1. Next.js funding, transfers, and history (signup, login, and wallet dashboard are implemented).
 2. Backend container and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
