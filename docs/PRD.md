@@ -1123,49 +1123,71 @@ Sensitive implementation details and stack traces must not be returned to client
 
 The initial application should use a **modular monolith**.
 
-Suggested package structure:
+Required backend package structure (feature first, then technical layer):
 
 ```text
-com.payflow
-│
+com.payflow.backend
+├── BackendApplication.java
 ├── auth
 │   ├── controller
-│   ├── dto
 │   ├── service
-│   └── security
-│
-├── user
-│   ├── controller
-│   ├── entity
 │   ├── repository
-│   └── service
-│
+│   ├── entity
+│   ├── dto
+│   ├── security
+│   └── validation
+├── user
+│   ├── entity
+│   └── repository
 ├── wallet
 │   ├── controller
-│   ├── dto
-│   ├── entity
+│   ├── service
 │   ├── repository
-│   └── service
-│
+│   ├── entity
+│   └── dto
+├── transfer
+│   ├── controller
+│   ├── service
+│   └── dto
 ├── transaction
 │   ├── controller
-│   ├── dto
-│   ├── entity
+│   ├── service
 │   ├── repository
-│   └── service
-│
-├── payment
-├── merchant
-├── audit
-├── common
-│   ├── exception
-│   ├── response
-│   └── util
-│
-└── config
+│   ├── entity
+│   └── dto
+├── config
+└── common
+    ├── exception
+    └── response
 ```
 
-Feature-oriented modules are preferred over placing the entire application into global `controller`, `service`, and `repository` packages.
+Keep business features together; do not place the entire application into global
+`controller`, `service`, `repository`, or `dto` packages. Use singular package names.
+Within each feature:
+
+- `controller` contains REST endpoints and HTTP request/response handling.
+- `service` contains use cases, business rules, and transaction boundaries.
+- `repository` contains persistence interfaces and database queries.
+- `entity` contains JPA entities and their domain enums, such as account roles,
+  wallet statuses, and transaction types/statuses.
+- `dto` contains API request/response records and pagination envelopes.
+- `auth.security` contains JWT issuance/configuration, authentication converters,
+  cookie/session properties, and authentication-flow CSRF protection.
+- `auth.validation` contains authentication-specific validation annotations and validators.
+- Root `config` contains application-wide configuration; `common` contains shared
+  response envelopes and exception handling.
+
+Create a layer package only when it contains code. The user feature currently needs
+only entities and repositories; transfers use wallet and transaction repositories
+rather than introducing a transfer entity/repository. Add `payment`, `merchant`,
+and `audit` modules in their planned phases using the same conventions. Feature
+integration tests may remain in their feature test package; focused unit tests
+should follow the corresponding implementation subpackage.
+
+Use explicit imports and simple type names where names do not conflict. Apply
+Spring Java Format to main and test Java sources. Maven's `validate` phase must
+check formatting, including CI builds; use `./mvnw spring-javaformat:apply` to fix
+formatting and `./mvnw spring-javaformat:validate` to check it from `backend/`.
 
 ## 31.1 Browser and API Responsibilities
 

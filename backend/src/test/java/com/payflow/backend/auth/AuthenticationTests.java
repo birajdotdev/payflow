@@ -1,10 +1,18 @@
 package com.payflow.backend.auth;
 
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.payflow.backend.PostgresTestConfiguration;
 import com.payflow.backend.auth.security.AccountJwtAuthenticationConverter;
 import com.payflow.backend.auth.security.JwtProperties;
-import com.payflow.backend.wallet.WalletService;
+import com.payflow.backend.auth.service.CurrentUserService;
+import com.payflow.backend.wallet.service.WalletService;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,13 +36,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
-
-import javax.crypto.spec.SecretKeySpec;
-import java.time.Instant;
-import java.util.List;
-import java.util.Base64;
-import java.util.Map;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

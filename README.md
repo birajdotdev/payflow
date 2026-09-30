@@ -165,6 +165,18 @@ Conflict responses use the same message for email and phone and never identify t
 conflicting field. A 409 still reveals that the submitted combination cannot be
 registered; this is not an account-enumeration-proof signup flow.
 
+## Backend package organization
+
+Java code under `com.payflow.backend` is grouped by business feature (`auth`, `user`,
+`wallet`, `transfer`, `transaction`). Each feature uses `controller`, `service`,
+`repository`, `entity`, and `dto` subpackages where needed. Entities and their domain
+enums live together; authentication-specific security and validation remain under
+`auth.security` and `auth.validation`. Application-wide configuration lives in
+`config`, with shared errors and response envelopes in `common`.
+
+See [PRD section 31](docs/PRD.md#31-backend-architecture) for the package tree and
+responsibilities. Feature integration tests stay grouped by feature.
+
 ## Backend Java formatting
 
 The backend uses Spring Java Format with spaces for indentation. Maven's `validate`

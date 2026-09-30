@@ -1,13 +1,21 @@
 package com.payflow.backend.auth;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+
 import com.payflow.backend.PostgresTestConfiguration;
-import com.payflow.backend.user.User;
-import com.payflow.backend.user.UserRepository;
-import com.payflow.backend.user.UserRole;
-import com.payflow.backend.user.UserStatus;
-import com.payflow.backend.wallet.Wallet;
-import com.payflow.backend.wallet.WalletRepository;
-import com.payflow.backend.wallet.WalletStatus;
+import com.payflow.backend.user.entity.User;
+import com.payflow.backend.user.entity.UserRole;
+import com.payflow.backend.user.entity.UserStatus;
+import com.payflow.backend.user.repository.UserRepository;
+import com.payflow.backend.wallet.entity.Wallet;
+import com.payflow.backend.wallet.entity.WalletStatus;
+import com.payflow.backend.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,21 +28,13 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;

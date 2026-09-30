@@ -4,10 +4,10 @@ import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 
-import com.payflow.backend.auth.LoginSessionRepository;
-import com.payflow.backend.user.User;
-import com.payflow.backend.user.UserRepository;
-import com.payflow.backend.user.UserStatus;
+import com.payflow.backend.auth.repository.LoginSessionRepository;
+import com.payflow.backend.user.entity.User;
+import com.payflow.backend.user.entity.UserStatus;
+import com.payflow.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
