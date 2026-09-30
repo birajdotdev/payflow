@@ -5,6 +5,10 @@ import viteReact from "@vitejs/plugin-react"
 import { defineConfig, lazyPlugins } from "vite-plus"
 
 const config = defineConfig({
+  test: {
+    // The scaffold has no tests yet; keep the baseline CI sequence runnable.
+    passWithNoTests: true,
+  },
   lint: {
     plugins: ["oxc", "typescript", "unicorn", "import"],
     categories: {
@@ -18,6 +22,7 @@ const config = defineConfig({
       builtin: true,
     },
     ignorePatterns: [
+      "src/routeTree.gen.ts",
       "**/.nx/**",
       "**/.svelte-kit/**",
       "**/build/**",
@@ -256,7 +261,12 @@ const config = defineConfig({
       functions: ["cn", "cva"],
     },
     sortImports: true,
-    ignorePatterns: ["package-lock.json", "pnpm-lock.yaml", "yarn.lock"],
+    ignorePatterns: [
+      "src/routeTree.gen.ts",
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ],
   },
   resolve: { tsconfigPaths: true },
   plugins: lazyPlugins(() => [

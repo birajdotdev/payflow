@@ -1,189 +1,79 @@
-Welcome to your new TanStack Start app!
+# PayFlow frontend
 
-# Getting Started
+The frontend is a React 19 and TypeScript SPA using TanStack Router for file-based
+browser routing, Tailwind CSS and shadcn/ui for styling, and Vite+ for development,
+formatting (Oxfmt), linting (Oxlint), TypeScript checks, tests (Vitest), and builds.
+The current scaffold contains a landing page and theme support.
 
-To run this application:
+Spring Boot provides the REST API and owns authentication, authorization,
+validation, balances, transactions, and persistence. Wallet workflows, a shared
+API client, and refresh-session integration are still planned. The
+[PRD](../docs/PRD.md) specifies TanStack Query for remote state, TanStack Form and
+Zod for forms, and Axios for HTTP transport; these are not installed yet.
 
-```bash
-pnpm install
-pnpm dev
-```
+## Local development
 
-# Building For Production
+Use Node.js 24 and Vite+ (`vp`). The project pins pnpm 12.8.1 in `package.json` and
+toolchain versions in `pnpm-workspace.yaml` and `pnpm-lock.yaml`.
 
-To build this application for production:
-
-```bash
-pnpm build
-```
-
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
-## Linting & Formatting
-
-This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
+Run all frontend commands from `frontend/`:
 
 ```bash
-pnpm lint
-pnpm format
-pnpm check
+vp install --frozen-lockfile
+vp run dev
 ```
 
-## Routing
+Open <http://localhost:3000>. Backend setup is documented in the
+[root README](../README.md). The scaffold currently has no API proxy configured.
+The planned development proxy forwards `/api` to <http://localhost:8080>, retaining
+the complete path; the planned client API base URL is `/api/v1`.
 
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
+## Route generation
 
-### Adding A Route
+Routes live in `src/routes/`; `__root.tsx` renders the shared layout with `Outlet`.
+TanStack Router generates `src/routeTree.gen.ts` during development and builds.
+Generate it explicitly before standalone checks:
 
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router"
+```bash
+vp run generate-routes
 ```
 
-Then anywhere in your JSX you can use it like so:
+Do not hand-edit the generated tree. `tsr.config.json` is shared by the router CLI
+and Vite plugin and configures single quotes and no semicolons. The generated tree
+is excluded from formatting and linting in `vite.config.ts`, so regeneration does
+not conflict with source formatting. The router plugin runs before the React
+plugin and enables automatic route code splitting.
 
-```tsx
-<Link to="/about">About</Link>
+## Checks, tests, and builds
+
+Run the same sequence as frontend CI:
+
+```bash
+vp install --frozen-lockfile
+vp run generate-routes
+vp check
+vp test run
+vp build
 ```
 
-This will create a link that will navigate to the `/about` route.
+`vp check` is the built-in formatting, lint, and TypeScript check. `vp run check`
+invokes the package script, which only checks formatting. Use `vp run format` to
+apply formatting and lint fixes to source files.
 
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
+There are no frontend tests yet. `test.passWithNoTests` in `vite.config.ts` allows
+the empty scaffold suite to pass; actual test failures will still fail CI. Remove
+this allowance when the frontend test suite is added.
 
-### Using A Layout
+## Static build and hosting
 
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
+`vp build` writes static assets to `dist/`. Inspect the build locally with:
 
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "My App" },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
+```bash
+vp preview
 ```
 
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from "@tanstack/react-start"
-
-const getServerTime = createServerFn({
-  method: "GET",
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState("")
-
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router"
-import { json } from "@tanstack/react-start"
-
-export const Route = createFileRoute("/api/hello")({
-  server: {
-    handlers: {
-      GET: () => json({ message: "Hello, World!" }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router"
-
-export const Route = createFileRoute("/people")({
-  loader: async () => {
-    const response = await fetch("https://swapi.dev/api/people")
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+Production hosting must serve `dist/`, provide SPA fallback to `index.html` for
+application routes, and proxy `/api/*` to Spring Boot. API requests and missing
+assets must not receive SPA HTML. The production static-server configuration and
+deep-link/API browser checks are still planned. `vp preview` is for local
+inspection; production uses a static web server.
