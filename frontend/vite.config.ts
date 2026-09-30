@@ -9,7 +9,7 @@ const config = defineConfig({
     port: 3000,
     proxy: { '/api': { target: 'http://localhost:8080', changeOrigin: false } },
   },
-  test: {},
+  test: { exclude: ['e2e/**', 'node_modules/**', 'dist/**'] },
   lint: {
     plugins: ['oxc', 'typescript', 'unicorn', 'import'],
     categories: { correctness: 'error' },

@@ -13,13 +13,13 @@ bounded refresh retries. Monetary JSON values are parsed as decimal strings to
 preserve BigDecimal precision. Access tokens live only in memory. Private queries
 are scoped to the signed-in user and cleared on logout or session rejection.
 
-Implemented routes: `/`, `/register`, `/login`, `/dashboard`, and `/wallet`.
+Implemented routes: `/`, `/register`, `/login`, `/dashboard`, `/wallet`, `/send`, `/transactions`, and `/transactions/$transactionId`.
 The dashboard shows the real wallet balance and five recent transactions.
-Deposits, transfers, full history, and profile screens are later features.
+Funding, transfers, filtered history, and receipts use the backend API.
 
 ## Local development
 
-Use Node.js 24 and Vite+ (`vp`). The project pins pnpm 12.8.1 in `package.json` and
+Use Node.js 24.21.0 (pinned in `.node-version`) and Vite+ (`vp`). The project pins pnpm 12.8.1 in `package.json` and
 toolchain versions in `pnpm-workspace.yaml` and `pnpm-lock.yaml`.
 
 Run all frontend commands from `frontend/`:
@@ -89,7 +89,7 @@ vp build
 ```
 
 `vp check` is the built-in formatting, lint, and TypeScript check. `vp run check`
-invokes the package script, which only checks formatting. Use `vp run format` to
+invokes the package script, which runs the same full check. Use `vp run format` to
 apply formatting and lint fixes to source files.
 
 Vitest tests cover form validation/submission, redirect sanitization, decimal
@@ -101,7 +101,7 @@ For a real API smoke check: register a unique email/phone, sign in, verify the
 zero-balance dashboard, open `/wallet`, reload to verify restoration, log out,
 then reload `/wallet` and verify sign-in with no wallet data. Check both desktop
 and mobile viewports. This flow was verified against the local Spring Boot API;
-an automated production-hosting browser suite remains future work.
+the Playwright suite now runs this workflow against the Compose production host.
 
 ## Static build and hosting
 
@@ -113,8 +113,7 @@ vp preview
 
 Production hosting must serve `dist/`, provide SPA fallback to `index.html` for
 application routes, and proxy `/api/*` to Spring Boot. API requests and missing
-assets must not receive SPA HTML. The production static-server configuration and
-deep-link/API browser checks are still planned. `vp preview` is for local
+assets must not receive SPA HTML. The nginx container implements this policy and Playwright verifies it. `vp preview` is for local
 inspection; production uses a static web server.
 
 ## UI blocks and transaction table
@@ -122,3 +121,44 @@ inspection; production uses a static web server.
 Authentication uses the shadcn `login-03` and `signup-03` blocks with shared TanStack Form/Zod state. The authenticated shell, account menu, and summary cards are adapted from `dashboard-01` to use PayFlow data and typed TanStack Router links. They retain the project's Base UI/Nova theme. Demo charts, social sign-in, and unrelated sample navigation were removed.
 
 The shared transaction data table follows shadcn's TanStack Table v9 pattern. The backend owns ordering, filtering, and pagination; URL search parameters own the view, Query owns server data, and Table uses manual pagination with the server total. Receipt pages share status rendering without importing table machinery. Financial submission and reconciliation remain in `use-financial-operation.ts`, independent of layout.
+
+Run the real two-user browser demo with `vp exec playwright install chromium` and
+`vp run test:e2e` after starting the root Compose stack. See the root README for
+the full reproducible workflow. Playwright files are excluded from Vitest.
+
+## Official documentation review
+
+The frontend was reviewed against the official [Router Vite integration](https://tanstack.com/router/latest/docs/installation/with-vite),
+[authenticated routes](https://tanstack.com/router/latest/docs/guide/authenticated-routes),
+[router context](https://tanstack.com/router/latest/docs/guide/router-context),
+[search parameters](https://tanstack.com/router/latest/docs/guide/search-params), and
+[external data loading](https://tanstack.com/router/latest/docs/guide/external-data-loading).
+The Router plugin precedes React, generates the ignored route tree, and splits route
+components. A pathless layout awaits shared session restoration in `beforeLoad`,
+passes typed auth context, and redirects to a sanitized internal return URL.
+Authentication changes invalidate the router. Query owns private API data.
+Read queries currently run in components with explicit pending/error states;
+loader-based `ensureQueryData` preloading is a documented future optimization.
+Financial mutations remain event-driven and never run from loaders or prefetching.
+
+Vite+ setup follows its [local CLI](https://viteplus.dev/guide/local-cli),
+[tests](https://viteplus.dev/guide/test), [CI](https://viteplus.dev/guide/ci), and
+[Docker](https://viteplus.dev/guide/docker) documentation. The workspace aligns
+Vite with Vite+ core and pins Vitest to the bundled 5.0.1. Tests import
+`vite-plus/test` and use the shared Vite configuration. The Docker build uses the
+pinned official Vite+ image with non-root source ownership and the pinned Node
+runtime; nginx serves only the static output.
+
+For installations where a globally npm-installed `vp` resolves its own toolchain
+instead of this project's dependencies, use the documented local CLI:
+
+```bash
+pnpm exec vp check
+pnpm exec vp test run
+pnpm exec vp build
+```
+
+The `check` and `test` package scripts also resolve the project-local binary.
+The standalone global Vite+ CLI is installed through the official installer;
+`npm install --global vite-plus` installs the npm CLI and does not supply global
+runtime management (`vp env`).
