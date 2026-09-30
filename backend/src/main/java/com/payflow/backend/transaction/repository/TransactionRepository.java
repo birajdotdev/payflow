@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import com.payflow.backend.transaction.entity.FinancialTransaction;
 import com.payflow.backend.transaction.entity.TransactionType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -23,9 +25,10 @@ public interface TransactionRepository
     Optional<FinancialTransaction> findByReceiverWalletIdAndTypeAndIdempotencyKey(UUID walletId, TransactionType type,
             String idempotencyKey);
 
+    Optional<FinancialTransaction> findByOriginalPaymentId(UUID originalPaymentId);
+
     Optional<FinancialTransaction> findByPaymentRequestId(UUID paymentRequestId);
 
-    org.springframework.data.domain.Page<FinancialTransaction> findByReceiverWalletIdAndType(UUID walletId,
-            TransactionType type, org.springframework.data.domain.Pageable pageable);
+    Page<FinancialTransaction> findByReceiverWalletIdAndType(UUID walletId, TransactionType type, Pageable pageable);
 
 }

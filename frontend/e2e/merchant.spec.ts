@@ -153,6 +153,81 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
     await expect(
       merchant.getByText('Order #1028', { exact: true })
     ).toBeVisible()
+    const refunds: { key: string | undefined; body: string | null }[] = []
+    await merchant.route(
+      '**/api/v1/merchants/payments/*/refund',
+      async (route) => {
+        refunds.push({
+          key: route.request().headers()['idempotency-key'],
+          body: route.request().postData(),
+        })
+        const response = await route.fetch()
+        expect(response.status()).toBe(200)
+        if (refunds.length === 1) await route.abort('failed')
+        else await route.fulfill({ response })
+      }
+    )
+    await merchant
+      .getByRole('button', { name: 'Refund payment', exact: true })
+      .click()
+    const confirmation = merchant.getByRole('dialog', {
+      name: 'Confirm full refund',
+    })
+    await expect(
+      confirmation.getByText('NPR 250.25', { exact: true })
+    ).toBeVisible()
+    await expect(
+      confirmation.getByText('Recipient wallet', { exact: true })
+    ).toBeVisible()
+    await confirmation
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click()
+    expect(refunds).toHaveLength(0)
+    await merchant
+      .getByRole('button', { name: 'Refund payment', exact: true })
+      .click()
+    await confirmation
+      .getByRole('button', { name: 'Confirm refund', exact: true })
+      .click()
+    await expect(confirmation.getByText(/Outcome unknown/)).toBeVisible()
+    await merchant.reload()
+    await expect(
+      merchant.getByText('Outcome unknown', { exact: true })
+    ).toBeVisible()
+    expect(refunds).toHaveLength(1)
+    await merchant
+      .getByRole('button', { name: 'Retry original request' })
+      .click()
+    await expect(
+      merchant.getByRole('button', { name: 'View refund receipt' })
+    ).toBeVisible()
+    expect(refunds).toHaveLength(2)
+    expect(refunds[1]).toEqual(refunds[0])
+    expect(refunds[0].body).toBeNull()
+    await customer.goto(receiptUrl)
+    await expect(customer.getByText('Refunded', { exact: true })).toBeVisible()
+    await expect(
+      customer.getByRole('button', { name: 'Refund payment', exact: true })
+    ).toHaveCount(0)
+    await customer.getByRole('button', { name: 'View refund receipt' }).click()
+    await expect(
+      customer.getByText('Merchant payment refund', { exact: true })
+    ).toBeVisible()
+    await expect(
+      customer.getByRole('button', { name: 'View original payment' })
+    ).toBeVisible()
+    await customer.goto('/wallet')
+    await expect(
+      customer.getByText('NPR 1,000.00', { exact: true })
+    ).toBeVisible()
+    await customer.goto('/transactions?page=0&size=20')
+    await expect(
+      customer.getByRole('link', { name: 'Refund received', exact: true })
+    ).toHaveCount(1)
+    await merchant.goto('/merchant')
+    await expect(merchant.getByText('NPR 0.00', { exact: true })).toBeVisible()
+    await merchant.getByRole('tab', { name: 'Incoming payments' }).click()
+    await expect(merchant.getByText('Refunded', { exact: true })).toBeVisible()
     await customer.goto(path)
     await expect(
       customer.getByText('Payment confirmed.', { exact: true })

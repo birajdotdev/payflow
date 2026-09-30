@@ -23,6 +23,9 @@ export type Transaction = {
   currency: string
   description: string | null
   createdAt: string
+  originalPaymentId?: string | null
+  refundTransactionId?: string | null
+  refundStatus?: string | null
   paymentRequestId?: string | null
 }
 

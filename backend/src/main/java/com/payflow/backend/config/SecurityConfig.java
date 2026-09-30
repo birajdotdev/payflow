@@ -61,7 +61,7 @@ public class SecurityConfig {
                         "/api/v1/payments/{id}")
                 .hasAnyRole("USER", "MERCHANT", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/merchants/payment-requests",
-                        "/api/v1/merchants/payment-requests/{id}/cancel")
+                        "/api/v1/merchants/payment-requests/{id}/cancel", "/api/v1/merchants/payments/{id}/refund")
                 .hasRole("MERCHANT")
                 .requestMatchers(HttpMethod.POST, "/api/v1/payments/{id}/pay")
                 .hasAnyRole("USER", "MERCHANT")

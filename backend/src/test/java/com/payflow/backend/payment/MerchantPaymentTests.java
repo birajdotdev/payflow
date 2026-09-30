@@ -1,9 +1,11 @@
 package com.payflow.backend.payment;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
+
 import com.payflow.backend.PostgresTestConfiguration;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -19,7 +22,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -346,6 +351,186 @@ class MerchantPaymentTests {
             .andExpect(jsonPath("$.paths['/api/v1/payments/{id}/pay'].post.parameters[1].required").value(true));
     }
 
+    private String settled() throws Exception {
+        return data(pay(customer, requestId, "checkout").andExpect(status().isOk())).path("transactionId").asText();
+    }
+
+    private ResultActions refund(String bearer, String id, String key) throws Exception {
+        return write(bearer, "/merchants/payments/" + id + "/refund", "", key);
+    }
+
+    private void refundedOnce(String id) throws Exception {
+        state("1000", "0", 1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM transactions WHERE type = 'REFUND'", Long.class))
+            .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT version FROM wallets WHERE id = ?::uuid", Long.class, customerWallet))
+            .isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT version FROM wallets WHERE id = ?::uuid", Long.class, merchantWallet))
+            .isEqualTo(2);
+        read(customer, "/transactions/" + id).andExpect(jsonPath("$.data.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.refundStatus").value("REFUNDED"))
+            .andExpect(jsonPath("$.data.refundTransactionId").isNotEmpty());
+        read(merchant, "/merchants/payments").andExpect(jsonPath("$.data.content[0].refundStatus").value("REFUNDED"));
+    }
+
+    @Test
+    void fullRefundAcceptanceRetriesAndReadOnlyRecovery() throws Exception {
+        String id = settled();
+
+        var before = jdbc.queryForList("SELECT * FROM transactions WHERE id = ?::uuid", id);
+
+        var receipt = data(refund(merchant, id, "refund-key").andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.originalPaymentId").value(id))
+            .andExpect(jsonPath("$.data.amount").value(250.25))
+            .andExpect(jsonPath("$.data.senderWalletId").value(merchantWallet))
+            .andExpect(jsonPath("$.data.receiverWalletId").value(customerWallet)));
+
+        assertThat(data(refund(merchant, id, "refund-key").andExpect(status().isOk()))).isEqualTo(receipt);
+
+        read(merchant, "/transactions/outcome?operation=REFUND&key=refund-key")
+            .andExpect(jsonPath("$.data.state").value("FOUND"))
+            .andExpect(jsonPath("$.data.transaction.transactionId").value(receipt.path("transactionId").asText()));
+
+        read(customer, "/transactions/outcome?operation=REFUND&key=refund-key")
+            .andExpect(jsonPath("$.data.state").value("UNKNOWN"));
+
+        refund(merchant, id, "new-key").andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("PAYMENT_ALREADY_REFUNDED"));
+        assertThat(jdbc.queryForList("SELECT * FROM transactions WHERE id = ?::uuid", id)).isEqualTo(before);
+
+        refundedOnce(id);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { true, false })
+    void concurrentRefundAttemptsReverseExactlyOnce(boolean sameKey) throws Exception {
+        String id = settled();
+        assertThat(race(() -> code(refund(merchant, id, "one")),
+                () -> code(refund(merchant, id, sameKey ? "one" : "two"))))
+            .containsExactlyInAnyOrder(200, sameKey ? 200 : 409);
+
+        refundedOnce(id);
+    }
+
+    @Test
+    void refundAuthorizationEligibilityBodyAndKeyConflicts() throws Exception {
+        String id = settled();
+        refund(customer, id, "key").andExpect(status().isForbidden());
+        enroll(other).andExpect(status().isOk());
+        refund(other, id, "key").andExpect(status().isNotFound());
+        refund(merchant, UUID.randomUUID().toString(), "key").andExpect(status().isNotFound());
+        refund(merchant, id, "bad key").andExpect(status().isBadRequest());
+        write(merchant, "/merchants/payments/" + id + "/refund",
+                "{\"amount\":1,\"receiverWalletId\":\"" + merchantWallet + "\"}", "key")
+            .andExpect(status().isBadRequest());
+        fund(merchant, "1");
+        String deposit = jdbc.queryForObject(
+                "SELECT id::text FROM transactions WHERE receiver_wallet_id = ?::uuid AND type = 'DEPOSIT'",
+                String.class, merchantWallet);
+        refund(merchant, deposit, "key").andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("REFUND_INELIGIBLE"));
+        refund(merchant, id, "key").andExpect(status().isOk());
+        String next = create("10");
+        String nextId = data(pay(customer, next, "next").andExpect(status().isOk())).path("transactionId").asText();
+        refund(merchant, nextId, "key").andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "insufficient", "senderFrozen", "receiverFrozen", "customerInactive", "merchantSuspended",
+            "limit" })
+    void invalidRefundStatesDoNotChangeAnything(String condition) throws Exception {
+        String id = settled();
+
+        switch (condition) {
+            case "insufficient" -> jdbc.update("UPDATE wallets SET balance = 0 WHERE id = ?::uuid", merchantWallet);
+            case "senderFrozen" ->
+                jdbc.update("UPDATE wallets SET status = 'FROZEN' WHERE id = ?::uuid", merchantWallet);
+            case "receiverFrozen" ->
+                jdbc.update("UPDATE wallets SET status = 'FROZEN' WHERE id = ?::uuid", customerWallet);
+            case "customerInactive" -> jdbc.update(
+                    "UPDATE users SET status = 'SUSPENDED' WHERE id = (SELECT user_id FROM wallets WHERE id = ?::uuid)",
+                    customerWallet);
+            case "merchantSuspended" -> jdbc.update("UPDATE merchants SET status = 'SUSPENDED'");
+            case "limit" -> jdbc.update("UPDATE wallets SET balance = 1000000 WHERE id = ?::uuid", customerWallet);
+        }
+
+        var before = jdbc.queryForList("SELECT * FROM wallets ORDER BY id");
+        refund(merchant, id, "recoverable").andExpect(status().isConflict());
+        assertThat(jdbc.queryForList("SELECT * FROM wallets ORDER BY id")).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM transactions WHERE type = 'REFUND'", Long.class)).isZero();
+
+        read(merchant, "/transactions/outcome?operation=REFUND&key=recoverable")
+            .andExpect(jsonPath("$.data.state").value("UNKNOWN"));
+    }
+
+    @Test
+    void refundInsertFailureRollsBackDebitCreditAndKey() throws Exception {
+        String id = settled();
+
+        var before = jdbc.queryForList("SELECT * FROM wallets ORDER BY id");
+        jdbc.execute(
+                "CREATE FUNCTION reject_refund() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Injected failure'; END; $$");
+
+        try {
+            jdbc.execute(
+                    "CREATE TRIGGER reject_refund BEFORE INSERT ON transactions FOR EACH ROW EXECUTE FUNCTION reject_refund()");
+            refund(merchant, id, "rollback-refund").andExpect(status().isInternalServerError());
+            assertThat(jdbc.queryForList("SELECT * FROM wallets ORDER BY id")).isEqualTo(before);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM transactions WHERE type = 'REFUND'", Long.class))
+                .isZero();
+        }
+        finally {
+            jdbc.execute("DROP TRIGGER reject_refund ON transactions");
+            jdbc.execute("DROP FUNCTION reject_refund()");
+        }
+
+        refund(merchant, id, "rollback-refund").andExpect(status().isOk());
+
+        refundedOnce(id);
+    }
+
+    @Test
+    void refundAndTransferSpendingMerchantBalanceUseSharedLocks() throws Exception {
+        String id = settled();
+        String destination = wallet(other);
+        assertThat(race(() -> code(refund(merchant, id, "refund-spend")),
+                () -> code(write(merchant, "/transfers",
+                        "{\"receiverWalletId\":\"" + destination + "\",\"amount\":250.25}", "spend"))))
+            .containsExactlyInAnyOrder(200, 409);
+        assertThat(jdbc.queryForObject("SELECT sum(balance) FROM wallets", BigDecimal.class))
+            .isEqualByComparingTo("1000");
+        assertThat(
+                jdbc.queryForObject("SELECT balance FROM wallets WHERE id = ?::uuid", BigDecimal.class, merchantWallet))
+            .isEqualByComparingTo("0");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM transactions WHERE type IN ('REFUND', 'TRANSFER')",
+                Long.class))
+            .isEqualTo(1);
+    }
+
+    @Test
+    void databaseRejectsForgedAndDuplicateReversals() throws Exception {
+        String id = settled();
+
+        String insert = "INSERT INTO transactions(id, reference, type, status, sender_wallet_id, receiver_wallet_id, amount, currency, idempotency_key, created_at, updated_at, original_payment_id) VALUES (?::uuid, ?, 'REFUND', 'SUCCESS', ?::uuid, ?::uuid, ?, 'NPR', ?, now(), now(), ?::uuid)";
+
+        assertThatThrownBy(() -> jdbc.update(insert, UUID.randomUUID().toString(), "forged", merchantWallet,
+                customerWallet, new BigDecimal("1.00"), "forged", id))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbc.update(insert, UUID.randomUUID().toString(), "wrong-recipient", merchantWallet,
+                wallet(other), new BigDecimal("250.25"), "forged", id))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        refund(merchant, id, "real").andExpect(status().isOk());
+
+        assertThatThrownBy(() -> jdbc.update(insert, UUID.randomUUID().toString(), "duplicate", merchantWallet,
+                customerWallet, new BigDecimal("250.25"), "different", id))
+            .isInstanceOf(DataIntegrityViolationException.class);
+
+        refundedOnce(id);
+    }
+
     private void state(String a, String b, long count) {
         assertThat(
                 jdbc.queryForObject("SELECT balance FROM wallets WHERE id = ?::uuid", BigDecimal.class, customerWallet))
@@ -357,7 +542,7 @@ class MerchantPaymentTests {
             .isEqualTo(count);
     }
 
-    private <T> java.util.List<T> race(Callable<T> a, Callable<T> b) throws Exception {
+    private <T> List<T> race(Callable<T> a, Callable<T> b) throws Exception {
         var barrier = new CyclicBarrier(2);
         try (var pool = Executors.newFixedThreadPool(2)) {
             var first = pool.submit(() -> {
@@ -368,7 +553,7 @@ class MerchantPaymentTests {
                 barrier.await(10, TimeUnit.SECONDS);
                 return b.call();
             });
-            return java.util.List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
+            return List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
         }
     }
 

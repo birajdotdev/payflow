@@ -596,3 +596,13 @@ Payment processing locks one payment request before locking both wallets in UUID
 Payment recovery extends the existing saved-intent flow with MERCHANT_PAYMENT and the immutable request ID. No automatic mutation retry occurs after transport failure or reload. Explicit retries preserve the original key/request; outcome lookup scopes results to the paying wallet. Requests that have already been paid do not offer a new payment action.
 
 Run the [merchant acceptance scenario](docs/merchant-payments-acceptance.md) for exact balances, receipts, concurrency and rollback checks.
+
+## Merchant refunds
+
+Receiving merchants can fully refund a successful merchant payment from its shared receipt (open it from **Incoming payments** on `/merchant`). The confirmation dialog shows the original amount and customer wallet. Refunds return the original amount to the original customer; partial refunds and caller-selected amounts/recipients are unsupported.
+
+`POST /api/v1/merchants/payments/{transactionId}/refund` requires bearer authentication and `Idempotency-Key`, with **no request body**. The refund is a separate SUCCESS / REFUND record linked by `originalPaymentId`. The original payment remains unchanged; history, receipts, and dashboard show derived `refundStatus` and `refundTransactionId` with links between receipts.
+
+Wallet locks, transaction boundaries, unique constraints, and a PostgreSQL reversal constraint guarantee one refund per payment. Insufficient merchant funds, frozen wallets, unavailable participants, and balance limits reject the refund without partial changes. Same-key retries return the committed refund; a different key after refund gets `PAYMENT_ALREADY_REFUNDED`; a key reused for another payment gets `IDEMPOTENCY_CONFLICT`.
+
+After a lost response, reload preserves the original key/payment identity. **Check outcome** uses merchant-scoped `GET /api/v1/transactions/outcome?operation=REFUND&key=...`; **Retry original request** explicitly retries the same key. UNKNOWN never proves failure, and no financial POST is automatically replayed. See [refund acceptance](docs/merchant-payments-acceptance.md#full-merchant-refund).

@@ -719,17 +719,17 @@ Expiration is derived from the deadline for PENDING requests on reads and checke
 
 # 22. Refunds
 
-As an enhancement after the initial MVP, supported merchant payments may be refunded.
+Full refunds of successful merchant payments are implemented in Phase 2. Partial refunds are out of scope.
 
-A refund shall:
+- `POST /api/v1/merchants/payments/{transactionId}/refund` requires the receiving merchant and a valid `Idempotency-Key`. It accepts no body, amount, or recipient. Nonempty bodies are rejected. Other merchants receive 404; customers/admins cannot initiate refunds.
+- The backend derives the full original amount and original customer wallet. Both participant wallets are locked in UUID order, shared with payments/transfers/deposits. The merchant debit, customer credit, and linked SUCCESS / REFUND transaction commit atomically.
+- Reject insufficient merchant funds, frozen wallets, inactive accounts, suspended merchant profiles, recipient balance overflow, and ineligible payments without any financial changes. Failed attempts roll back the key too.
+- PostgreSQL enforces one refund per original payment, merchant-scoped REFUND keys, and exact reversal of a successful merchant payment's wallets, amount, and currency. Same-key retries return the original refund; different-key attempts for a refunded payment return `409 / PAYMENT_ALREADY_REFUNDED`; reuse for another payment returns `409 / IDEMPOTENCY_CONFLICT`.
+- Preserve every column of the original payment, including SUCCESS status. Receipts/history/dashboard expose derived `refundStatus` (`NOT_REFUNDED` or `REFUNDED`) and `refundTransactionId`. Refund receipts expose `originalPaymentId`; both participants can follow the receipt links.
+- `GET /api/v1/transactions/outcome?operation=REFUND&key=...` is scoped to the initiating merchant wallet. FOUND identifies the committed refund; UNKNOWN includes absent, uncommitted, and rolled-back operations and does not prove failure.
+- The accessible confirmation dialog shows original amount and recipient wallet before submission. Lost-response recovery preserves the original payment identity/key in session storage across reload/navigation, offers read-only reconciliation and explicit same-key retry, and never automatically replays a refund.
 
-- Reference the original payment
-- Create a separate refund transaction
-- Debit the merchant
-- Credit the customer
-- Never delete or modify the original transaction
-
-Financial history must remain immutable.
+Acceptance: NPR 1,000.00 customer → NPR 250.25 payment leaves NPR 749.75 customer / NPR 250.25 merchant. Full refund restores NPR 1,000.00 customer / NPR 0.00 merchant. Retries and concurrent attempts produce exactly one refund debit and credit. Financial history remains immutable.
 
 ---
 
@@ -2086,7 +2086,7 @@ The session/history browser cases simulate expiry responses at the browser API b
 
 ## Remaining Post-MVP Work
 
-- Remaining Phase 2 work: refunds, admin tooling, account freezing, advanced filtering/audit logs, and email notifications. Merchant profiles, requests, payment, and receipts/dashboard are implemented in section 56.
+- Remaining Phase 2 work: admin tooling, account freezing, advanced filtering/audit logs, and email notifications. Merchant profiles, requests, payment, and receipts/dashboard are implemented in section 56.
 - Phase 3 caching, messaging, observability, rate limiting, Kubernetes, and cloud deployment.
 - Security enhancements from section 47: complex cross-tab coordination, strict refresh rotation/token-family reuse detection, advanced lost-response/race recovery, session-management UI, and logout-all-devices.
 - Separate-origin browser hosting would require explicit credentialed CORS/preflight configuration and tests; the shipped MVP uses same-origin API forwarding.
@@ -2099,14 +2099,14 @@ The following pre-existing contract/scope gaps are retained for explicit resolut
 
 - Resolved: merchant APIs use the plural `/api/v1/merchants` namespace consistently, including `/api/v1/merchants/payment-requests`. The browser dashboard remains `/merchant`.
 - Resolved: MVP receipts cover deposits and P2P transfers; Phase 2 payment receipts refer specifically to merchant payments.
-- Resolved: `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER|MERCHANT_PAYMENT&key=<Idempotency-Key>` requires authentication and scopes deposits to the current receiver wallet and transfers/merchant payments to the current sender wallet. It returns the standard envelope with `{state: "FOUND", transaction: <receipt>}` for a committed operation, or `{state: "UNKNOWN", transaction: null}` otherwise. UNKNOWN includes uncommitted, absent, and rolled-back requests and must never imply failure. The browser keeps the exact payload/key, offers another read or an explicit same-key retry, and never automatically replays. A same-key retry remains safe even if the original request is still running because existing wallet locks and idempotency checks serialize execution. Transaction receipts in MVP cover deposits and P2P transfers; Phase 2 payment receipts refer to merchant payments.
+- Resolved: `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER|MERCHANT_PAYMENT|REFUND&key=<Idempotency-Key>` requires authentication and scopes deposits to the current receiver wallet and transfers/merchant payments/refunds to the current sender wallet. It returns the standard envelope with `{state: "FOUND", transaction: <receipt>}` for a committed operation, or `{state: "UNKNOWN", transaction: null}` otherwise. UNKNOWN includes uncommitted, absent, and rolled-back requests and must never imply failure. The browser keeps the exact payload/key, offers another read or an explicit same-key retry, and never automatically replays. A same-key retry remains safe even if the original request is still running because existing wallet locks and idempotency checks serialize execution. Transaction receipts in MVP cover deposits and P2P transfers; Phase 2 payment receipts refer to merchant payments.
 
 
 ---
 
 # 56. Phase 2 — Merchant Payments
 
-**Status: merchant payment slice implemented — 2026-09-30.** The plural endpoint contract was resolved before implementation. This slice covers merchant profiles → payment requests → customer payment → merchant receipt/dashboard; refunds and other Phase 2 work remain deferred.
+**Status: merchant payment slice implemented — 2026-09-30.** The plural endpoint contract was resolved before implementation. This slice covers merchant profiles → payment requests → customer payment → merchant receipt/dashboard → full merchant refunds; other Phase 2 work remains deferred.
 
 - Flyway V6 adds merchant profiles, payment requests, the immutable receipt/request link, operation-scoped idempotency, and request uniqueness constraints.
 - `/merchant` provides enrollment, fixed-amount request creation, shareable customer links, cancellation, paginated requests, and paginated incoming payments with participant receipts. Enrollment and request creation use dialogs. Request and incoming-payment lists share the shadcn/TanStack data-table renderer. Receipt actions open previews with a full-page route available. Its wallet and request/payment queries refresh every 10 seconds and on demand.
@@ -2118,3 +2118,8 @@ See [merchant acceptance scenario](merchant-payments-acceptance.md), [PostgreSQL
 
 
 Validation for this slice: `./mvnw verify` passed all 168 backend tests (including 25 merchant-payment cases); `pnpm exec vp check`, all 39 frontend tests, and the production build passed. All 7 Playwright tests passed against the rebuilt nginx/Compose stack at `http://localhost:13000`, including the merchant lost-response acceptance.
+
+
+## Merchant Refund Slice Validation — 2026-09-30
+
+Full merchant refunds are implemented with Flyway V7, immutable original payments and linked refund receipts, merchant-only confirmation, and persisted explicit recovery. `./mvnw verify` passed all 181 backend tests (38 merchant payment/refund cases). Frontend `pnpm exec vp check`, all 42 unit tests, and `pnpm exec vp build` passed. All 7 browser tests passed against the source-rebuilt Compose/Nginx stack at `http://localhost:13000`, including lost-response payment and refund recovery. T3 collaborative preview verification confirmed the amount/recipient dialog, successful refund, and original/refund receipt links.

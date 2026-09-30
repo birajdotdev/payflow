@@ -22,13 +22,14 @@ export const financialSchema = z.object({
 })
 
 export type Intent = {
-  operation: 'DEPOSIT' | 'TRANSFER' | 'MERCHANT_PAYMENT'
+  operation: 'DEPOSIT' | 'TRANSFER' | 'MERCHANT_PAYMENT' | 'REFUND'
   key: string
   payload: {
     amount: string
     receiverWalletId?: string
     description?: string
     paymentRequestId?: string
+    originalPaymentId?: string
   }
 }
 
@@ -43,12 +44,16 @@ export const submitIntent = async (intent: Intent) => {
       ? '/wallet/deposit'
       : intent.operation === 'TRANSFER'
         ? '/transfers'
-        : `/payments/${encodeURIComponent(intent.payload.paymentRequestId!)}/pay`,
+        : intent.operation === 'REFUND'
+          ? `/merchants/payments/${encodeURIComponent(intent.payload.originalPaymentId!)}/refund`
+          : `/payments/${encodeURIComponent(intent.payload.paymentRequestId!)}/pay`,
     {
       method: 'POST',
       headers: { 'Idempotency-Key': intent.key },
       data:
-        intent.operation === 'MERCHANT_PAYMENT' ? undefined : intent.payload,
+        intent.operation === 'MERCHANT_PAYMENT' || intent.operation === 'REFUND'
+          ? undefined
+          : intent.payload,
     }
   )
 
@@ -98,17 +103,22 @@ export function ambiguous(error: unknown) {
 
 export const savedIntentSchema = z
   .object({
-    operation: z.enum(['DEPOSIT', 'TRANSFER', 'MERCHANT_PAYMENT']),
+    operation: z.enum(['DEPOSIT', 'TRANSFER', 'MERCHANT_PAYMENT', 'REFUND']),
     key: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
     payload: z.object({
       amount: amountSchema(1000000),
       receiverWalletId: z.uuid().optional(),
       description: z.string().max(255).optional(),
       paymentRequestId: z.uuid().optional(),
+      originalPaymentId: z.uuid().optional(),
     }),
   })
   .refine(
     (intent) =>
       intent.operation !== 'MERCHANT_PAYMENT' ||
       !!intent.payload.paymentRequestId
+  )
+  .refine(
+    (intent) =>
+      intent.operation !== 'REFUND' || !!intent.payload.originalPaymentId
   )

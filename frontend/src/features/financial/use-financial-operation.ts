@@ -17,19 +17,26 @@ import type { Intent } from './operation'
 
 export function useFinancialOperation(
   transfer: boolean,
-  payment?: { paymentRequestId: string; amount: string }
+  payment?: { paymentRequestId: string; amount: string },
+  refund?: { originalPaymentId: string; amount: string }
 ) {
   const user = useSession().user!
 
   const client = useQueryClient()
 
-  const operation = payment
-    ? 'MERCHANT_PAYMENT'
-    : transfer
-      ? 'TRANSFER'
-      : 'DEPOSIT'
+  const operation = refund
+    ? 'REFUND'
+    : payment
+      ? 'MERCHANT_PAYMENT'
+      : transfer
+        ? 'TRANSFER'
+        : 'DEPOSIT'
 
-  const scope = payment ? `${operation}:${payment.paymentRequestId}` : operation
+  const scope = refund
+    ? `${operation}:${refund.originalPaymentId}`
+    : payment
+      ? `${operation}:${payment.paymentRequestId}`
+      : operation
 
   const intentKey = ['private', user.userId, 'intent', scope]
 
@@ -44,6 +51,8 @@ export function useFinancialOperation(
           JSON.parse(sessionStorage.getItem(storageKey) ?? 'null')
         )
         return saved.operation === operation &&
+          (!refund ||
+            saved.payload.originalPaymentId === refund.originalPaymentId) &&
           (!payment ||
             saved.payload.paymentRequestId === payment.paymentRequestId)
           ? saved
@@ -144,6 +153,16 @@ export function useFinancialOperation(
     mutation.isPending || lookup.isPending || unknown || receipt !== null
 
   return {
+    confirmRefund: () => {
+      if (!refund || locked) return
+      const saved: Intent = {
+        operation: 'REFUND',
+        key: crypto.randomUUID(),
+        payload: { ...refund },
+      }
+      setIntent(saved)
+      mutation.mutate(saved)
+    },
     confirmPayment: () => {
       if (!payment || locked) return
       const saved: Intent = {
