@@ -9,8 +9,9 @@
     "preview": "vp preview",
     "lint": "vp lint",
     "format": "vp fmt . && vp lint --fix",
-    "check": "vp fmt --check .",
-    "test:e2e": "playwright test"
+    "check": "vp check",
+    "test:e2e": "playwright test",
+    "test": "vp test"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
