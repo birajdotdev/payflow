@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
+import { WalletId } from '@/components/wallet-id'
 
 import { useFinancialOperation } from './use-financial-operation'
 export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
@@ -174,12 +175,13 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
                 Your request may still be running. Check its status before
                 starting another operation.
               </p>
-              <p>
-                Original amount: NPR {intent.payload.amount}
-                {intent.payload.receiverWalletId
-                  ? ` · Recipient: ${intent.payload.receiverWalletId}`
-                  : ''}
-              </p>
+              <p>Original amount: NPR {intent.payload.amount}</p>
+              {intent.payload.receiverWalletId && (
+                <WalletId
+                  value={intent.payload.receiverWalletId}
+                  label="Recipient wallet ID"
+                />
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={lookup.isPending || mutation.isPending}

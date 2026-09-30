@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { WalletId } from '@/components/wallet-id'
 import { useSession } from '@/features/auth/session'
 import { formatMoney } from '@/features/wallet/queries'
 import type { Transaction } from '@/features/wallet/queries'
@@ -88,7 +89,14 @@ export function ReceiptScreen({ transactionId }: { transactionId: string }) {
                 }).map(([label, value]) => (
                   <div key={label}>
                     <dt className="text-xs text-muted-foreground">{label}</dt>
-                    <dd className="mt-1 text-sm break-all">{value}</dd>
+                    <dd className="mt-1 text-sm break-all">
+                      {(label === 'Sender' && query.data.senderWalletId) ||
+                      (label === 'Recipient' && query.data.receiverWalletId) ? (
+                        <WalletId value={value!} label={`${label} wallet ID`} />
+                      ) : (
+                        value
+                      )}
+                    </dd>
                   </div>
                 ))}
               </dl>

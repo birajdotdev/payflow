@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { WalletId } from '@/components/wallet-id'
 import { useSession } from '@/features/auth/session'
 import { FundingScreen } from '@/features/financial/funding-screen'
 
@@ -143,9 +144,11 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="font-mono text-sm break-all">
-                {wallet.data?.walletId ?? 'Loading…'}
-              </p>
+              {wallet.data ? (
+                <WalletId value={wallet.data.walletId} />
+              ) : (
+                <Skeleton className="h-8 w-full" />
+              )}
             </CardContent>
           </Card>
         </>
@@ -175,8 +178,8 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
                       <dt className="text-sm text-muted-foreground">
                         Wallet number
                       </dt>
-                      <dd className="mt-1 font-mono text-sm break-all">
-                        {wallet.data.walletId}
+                      <dd className="mt-1">
+                        <WalletId value={wallet.data.walletId} />
                       </dd>
                     </div>
                     <div>
