@@ -9,7 +9,7 @@ import {
 import { LayoutDashboard, LogOut, WalletCards } from 'lucide-react'
 
 import { Brand } from '@/components/brand'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { safeReturn } from '@/features/auth/contracts'
 import { auth, useSession } from '@/features/auth/session'
@@ -74,39 +74,35 @@ function ProtectedLayout() {
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 md:grid-cols-[180px_1fr]">
         <aside className="flex flex-col gap-5">
           <nav aria-label="Main navigation" className="flex gap-2 md:flex-col">
-            <Button
-              variant="ghost"
-              className="justify-start"
-              render={
-                <Link
-                  to="/dashboard"
-                  activeProps={{
-                    'aria-current': 'page',
-                    className: 'bg-accent',
-                  }}
-                />
-              }
+            <Link
+              to="/dashboard"
+              className={buttonVariants({
+                variant: 'ghost',
+                className: 'justify-start',
+              })}
+              activeProps={{
+                'aria-current': 'page',
+                className: 'bg-accent',
+              }}
             >
               <LayoutDashboard data-icon="inline-start" />
               Overview
-            </Button>
+            </Link>
 
-            <Button
-              variant="ghost"
-              className="justify-start"
-              render={
-                <Link
-                  to="/wallet"
-                  activeProps={{
-                    'aria-current': 'page',
-                    className: 'bg-accent',
-                  }}
-                />
-              }
+            <Link
+              to="/wallet"
+              className={buttonVariants({
+                variant: 'ghost',
+                className: 'justify-start',
+              })}
+              activeProps={{
+                'aria-current': 'page',
+                className: 'bg-accent',
+              }}
             >
               <WalletCards data-icon="inline-start" />
               My wallet
-            </Button>
+            </Link>
           </nav>
 
           <Separator />

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { ArrowRight, WalletCards, ShieldCheck, History } from 'lucide-react'
 
 import { Brand } from '@/components/brand'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -19,17 +19,13 @@ function Home() {
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 p-6">
         <Brand />
 
-        <Button
-          variant="outline"
-          render={
-            <Link
-              to="/login"
-              search={{ redirect: '/dashboard', registered: false }}
-            />
-          }
+        <Link
+          to="/login"
+          search={{ redirect: '/dashboard', registered: false }}
+          className={buttonVariants({ variant: 'outline' })}
         >
           Sign in
-        </Button>
+        </Link>
       </header>
 
       <main className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16 sm:py-24">
@@ -48,13 +44,14 @@ function Home() {
             make every step easy to follow.
           </p>
 
-          <Button
-            size="lg"
-            render={<Link to="/register" search={{ redirect: '/dashboard' }} />}
+          <Link
+            to="/register"
+            search={{ redirect: '/dashboard' }}
+            className={buttonVariants({ size: 'lg' })}
           >
             Create your wallet
             <ArrowRight data-icon="inline-end" />
-          </Button>
+          </Link>
 
           <p className="text-xs text-muted-foreground">
             A demo experience with simulated NPR funds.
