@@ -27,8 +27,9 @@ Implemented:
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-The frontend scaffold has a landing page; wallet workflows and API integration are
-not implemented yet. The backend uses session-bound access JWTs and HttpOnly refresh cookies. Register through the API first,
+The frontend includes registration, login, protected dashboard/wallet views,
+real API queries, refresh-cookie session restoration, and logout. Deposits and
+transfers are implemented in the backend and await their frontend feature. The backend uses session-bound access JWTs and HttpOnly refresh cookies. Register through the API first,
 then log in to receive an access token. API routes outside registration, login,
 refresh/logout, current user/wallet, deposits, transfers, transaction history/details, and API
 documentation are denied.

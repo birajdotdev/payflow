@@ -1,0 +1,301 @@
+import { useForm } from '@tanstack/react-form'
+import { useMutation } from '@tanstack/react-query'
+import { Link, useRouter } from '@tanstack/react-router'
+import { ArrowRight, ShieldCheck } from 'lucide-react'
+import { z } from 'zod'
+
+import { Brand } from '@/components/brand'
+import { ErrorNotice } from '@/components/feedback'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
+
+import { loginSchema, registerSchema } from './contracts'
+import { auth, useSession } from './session'
+
+export function AuthScreen({
+  mode,
+  redirect = '/dashboard',
+  registered = false,
+}: {
+  mode: 'login' | 'register'
+  redirect?: '/dashboard' | '/wallet'
+  registered?: boolean
+}) {
+  const router = useRouter()
+  const session = useSession()
+  const isRegister = mode === 'register'
+
+  const mutation = useMutation({
+    mutationFn: async (value: {
+      fullName: string
+      phone: string
+      email: string
+      password: string
+    }) => {
+      if (isRegister) {
+        await auth.register(registerSchema.parse(value))
+
+        await router.navigate({
+          to: '/login',
+          search: { redirect, registered: true },
+        })
+      } else {
+        await auth.login(loginSchema.parse(value))
+
+        await router.invalidate()
+        await router.navigate({ to: redirect })
+      }
+    },
+  })
+
+  const logout = useMutation({ mutationFn: () => auth.logout() })
+
+  const form = useForm({
+    defaultValues: { fullName: '', phone: '', email: '', password: '' },
+    validators: {
+      onSubmit: isRegister
+        ? registerSchema
+        : loginSchema.extend({
+            fullName: z.string(),
+            phone: z.string(),
+          }),
+    },
+    onSubmit: async ({ value }) => {
+      await mutation.mutateAsync(value).catch(() => undefined)
+    },
+  })
+
+  const fields = [
+    ...(isRegister
+      ? [
+          {
+            name: 'fullName' as const,
+            label: 'Full name',
+            type: 'text',
+            autoComplete: 'name',
+            placeholder: 'Your full name',
+          },
+          {
+            name: 'phone' as const,
+            label: 'Phone number',
+            type: 'tel',
+            autoComplete: 'tel',
+            placeholder: '+9779800000000',
+          },
+        ]
+      : []),
+    {
+      name: 'email' as const,
+      label: 'Email address',
+      type: 'email',
+      autoComplete: 'email',
+      placeholder: 'you@example.com',
+    },
+    {
+      name: 'password' as const,
+      label: 'Password',
+      type: 'password',
+      autoComplete: isRegister ? 'new-password' : 'current-password',
+      placeholder: 'Enter your password',
+    },
+  ]
+
+  return (
+    <main className="grid min-h-svh lg:grid-cols-2">
+      <section className="flex flex-col justify-between gap-12 bg-muted/50 p-8 lg:p-14">
+        <Brand />
+
+        <div className="flex max-w-lg flex-col gap-6">
+          <p className="text-sm font-medium text-primary">
+            YOUR EVERYDAY WALLET
+          </p>
+
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+            A little more flow.
+            <br />A lot more clarity.
+          </h1>
+
+          <p className="text-lg text-muted-foreground">
+            One place for your wallet, your balance, and every step along the
+            way.
+          </p>
+
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <ShieldCheck className="size-5 text-primary" />
+            Secure sign-in. A wallet that’s yours.
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          PayFlow is a demo wallet. All funds are simulated NPR.
+        </p>
+      </section>
+
+      <section className="flex items-center justify-center p-6 sm:p-12">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>
+              {isRegister ? 'Create your account' : 'Welcome back'}
+            </CardTitle>
+
+            <CardDescription>
+              {isRegister
+                ? 'Start with a free wallet and NPR 0.00.'
+                : 'Sign in to see your PayFlow wallet.'}
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="flex flex-col gap-5">
+            {registered && (
+              <Alert>
+                <AlertTitle>Your wallet is ready</AlertTitle>
+                <AlertDescription>
+                  Account created. Sign in to get started.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {session.logoutUnconfirmed && (
+              <Alert>
+                <AlertTitle>Server logout is unconfirmed</AlertTitle>
+                <AlertDescription>
+                  Your local session was cleared, but we could not confirm
+                  revocation. Retry before leaving a shared device.
+                  <Button
+                    variant="outline"
+                    disabled={logout.isPending}
+                    onClick={() => logout.mutate()}
+                  >
+                    Retry logout
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {logout.error && <ErrorNotice error={logout.error} />}
+
+            <form
+              noValidate
+              onSubmit={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+
+                void form.handleSubmit()
+              }}
+            >
+              <FieldGroup>
+                {fields.map((input) => (
+                  <form.Field
+                    key={input.name}
+                    name={input.name}
+                    validators={{
+                      onBlur: isRegister
+                        ? registerSchema.shape[input.name]
+                        : input.name === 'email'
+                          ? loginSchema.shape.email
+                          : loginSchema.shape.password,
+                    }}
+                  >
+                    {(field) => {
+                      const invalid =
+                        field.state.meta.isTouched && !field.state.meta.isValid
+
+                      return (
+                        <Field data-invalid={invalid}>
+                          <FieldLabel htmlFor={field.name}>
+                            {input.label}
+                          </FieldLabel>
+
+                          <Input
+                            id={field.name}
+                            name={field.name}
+                            type={input.type}
+                            autoComplete={input.autoComplete}
+                            placeholder={input.placeholder}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(event) =>
+                              field.handleChange(event.target.value)
+                            }
+                            aria-invalid={invalid}
+                            aria-describedby={
+                              invalid ? `${field.name}-error` : undefined
+                            }
+                            disabled={mutation.isPending}
+                          />
+
+                          {input.name === 'password' && isRegister && (
+                            <FieldDescription>
+                              At least 8 characters; up to 72 UTF-8 bytes.
+                            </FieldDescription>
+                          )}
+
+                          {invalid && (
+                            <FieldError
+                              id={`${field.name}-error`}
+                              errors={field.state.meta.errors}
+                            />
+                          )}
+                        </Field>
+                      )
+                    }}
+                  </form.Field>
+                ))}
+
+                {mutation.error && <ErrorNotice error={mutation.error} />}
+
+                <form.Subscribe selector={(state) => [state.isSubmitting]}>
+                  {([submitting]) => (
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={submitting || mutation.isPending}
+                    >
+                      {submitting ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <ArrowRight data-icon="inline-start" />
+                      )}
+
+                      {isRegister ? 'Create account' : 'Sign in'}
+                    </Button>
+                  )}
+                </form.Subscribe>
+              </FieldGroup>
+            </form>
+          </CardContent>
+
+          <CardFooter>
+            <p className="text-sm text-muted-foreground">
+              {isRegister ? 'Already have an account? ' : 'New to PayFlow? '}
+              <Link
+                className="font-medium text-primary hover:underline"
+                to={isRegister ? '/login' : '/register'}
+                search={{ redirect, registered: false }}
+              >
+                {isRegister ? 'Sign in' : 'Create an account'}
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
+      </section>
+    </main>
+  )
+}
