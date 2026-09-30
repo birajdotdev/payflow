@@ -77,7 +77,7 @@ class AuthenticationTests {
                 .andExpect(jsonPath("$.data.user.userId").value(registered.path("userId").asText()))
                 .andExpect(jsonPath("$.data.user.role").value("USER"))
                 .andExpect(jsonPath("$.data.user.passwordHash").doesNotExist())
-                .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, containsString("no-store")))
                 .andReturn();
         JsonNode loggedIn = json.readTree(result.getResponse().getContentAsString()).path("data");
@@ -134,7 +134,7 @@ class AuthenticationTests {
         login("invalid", PASSWORD).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         login(EMAIL, "€".repeat(25)).andExpect(status().isBadRequest());
-        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        mvc.perform(post("/api/v1/auth/login").header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -280,7 +280,7 @@ class AuthenticationTests {
     }
 
     private JsonNode register(String email, String phone) throws Exception {
-        String response = mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+        String response = mvc.perform(post("/api/v1/auth/register").header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("fullName", "Demo User", "email", email,
                                 "phone", phone, "password", PASSWORD))))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -288,7 +288,7 @@ class AuthenticationTests {
     }
 
     private ResultActions login(String email, String password) throws Exception {
-        return mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+        return mvc.perform(post("/api/v1/auth/login").header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("email", email, "password", password))));
     }
 

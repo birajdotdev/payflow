@@ -29,13 +29,17 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, AccountJwtAuthenticationConverter converter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AccountJwtAuthenticationConverter converter,
+            com.payflow.backend.auth.security.SessionProperties sessionProperties) throws Exception {
         return http
-                // This API does not accept browser cookies or session authentication.
+                // Bearer business APIs are exempt; auth flows use the mandatory custom-header/origin defense.
                 .csrf(csrf -> csrf.disable())
+                .addFilterBefore(new com.payflow.backend.auth.security.AuthFlowCsrfFilter(sessionProperties, objectMapper),
+                        org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login",
+                                "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/me", "/api/v1/wallet",
                                 "/api/v1/transactions", "/api/v1/transactions/{id}")

@@ -243,7 +243,7 @@ class RegistrationTests {
 
     @Test
     void malformedJsonReturnsSafe400() throws Exception {
-        mvc.perform(post(REGISTER).contentType(MediaType.APPLICATION_JSON).content("{\"password\":"))
+        mvc.perform(post(REGISTER).header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON).content("{\"password\":"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         assertThat(users.count()).isZero();
@@ -274,7 +274,7 @@ class RegistrationTests {
     }
 
     private ResultActions register(Map<String, Object> request) throws Exception {
-        return mvc.perform(post(REGISTER).contentType(MediaType.APPLICATION_JSON)
+        return mvc.perform(post(REGISTER).header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(request)));
     }
 

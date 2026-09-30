@@ -20,9 +20,18 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AccountJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     private final UserRepository users;
+    private final com.payflow.backend.auth.LoginSessionRepository sessions;
+    private final java.time.Clock clock;
 
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt) {
+        try {
+            sessions.findById(UUID.fromString(jwt.getClaimAsString("sid")))
+                    .filter(s -> s.getUserId().toString().equals(jwt.getSubject()) && s.validAt(clock.instant()))
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid session"));
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new OAuth2AuthenticationException(new OAuth2Error("invalid_token"));
+        }
         User user = users.findById(UUID.fromString(jwt.getSubject()))
                 .filter(account -> account.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new OAuth2AuthenticationException(new OAuth2Error("invalid_token")));

@@ -224,11 +224,11 @@ class TransactionTests {
     }
 
     private String account(String email, String phone) throws Exception {
-        mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/auth/register").header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("fullName", "Demo User", "email", email,
                                 "phone", phone, "password", "Demo-password-123"))))
                 .andExpect(status().isCreated());
-        return receipt(mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+        return receipt(mvc.perform(post("/api/v1/auth/login").header("X-PayFlow-CSRF", "1").header("Origin", "https://localhost").contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("email", email, "password", "Demo-password-123"))))
                 .andExpect(status().isOk())).path("accessToken").asText();
     }
