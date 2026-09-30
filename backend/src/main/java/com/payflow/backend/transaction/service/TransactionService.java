@@ -65,6 +65,21 @@ public class TransactionService {
                     "Transaction not found."));
     }
 
+    public com.payflow.backend.transaction.dto.OperationOutcome outcome(TransactionType operation, String key) {
+        UUID walletId = currentWalletId();
+        if ((operation != TransactionType.DEPOSIT && operation != TransactionType.TRANSFER) || key == null
+                || !key.matches("[A-Za-z0-9_-]{1,128}")) {
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                    "Use DEPOSIT or TRANSFER and a valid idempotency key.");
+        }
+        var result = operation == TransactionType.DEPOSIT
+                ? transactions.findByReceiverWalletIdAndTypeAndIdempotencyKey(walletId, operation, key)
+                : transactions.findBySenderWalletIdAndTypeAndIdempotencyKey(walletId, operation, key);
+        return result
+            .map(t -> new com.payflow.backend.transaction.dto.OperationOutcome("FOUND", TransactionResponse.from(t)))
+            .orElseGet(() -> new com.payflow.backend.transaction.dto.OperationOutcome("UNKNOWN", null));
+    }
+
     private UUID currentWalletId() {
         return wallets.findIdByUserId(currentUserService.requireCurrentUser().getId())
             .orElseThrow(() -> new IllegalStateException("Primary wallet is missing."));

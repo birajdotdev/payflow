@@ -12,7 +12,7 @@ export const Route = createFileRoute('/login')({
     await context.auth.restore()
 
     if (context.auth.getState().status === 'authenticated')
-      throw redirect({ to: search.redirect })
+      throw redirect({ href: search.redirect })
   },
   component: Login,
 })

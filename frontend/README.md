@@ -116,3 +116,9 @@ application routes, and proxy `/api/*` to Spring Boot. API requests and missing
 assets must not receive SPA HTML. The production static-server configuration and
 deep-link/API browser checks are still planned. `vp preview` is for local
 inspection; production uses a static web server.
+
+## UI blocks and transaction table
+
+Authentication uses the shadcn `login-03` and `signup-03` blocks with shared TanStack Form/Zod state. The authenticated shell, account menu, and summary cards are adapted from `dashboard-01` to use PayFlow data and typed TanStack Router links. They retain the project's Base UI/Nova theme. Demo charts, social sign-in, and unrelated sample navigation were removed.
+
+The shared transaction data table follows shadcn's TanStack Table v9 pattern. The backend owns ordering, filtering, and pagination; URL search parameters own the view, Query owns server data, and Table uses manual pagination with the server total. Receipt pages share status rendering without importing table machinery. Financial submission and reconciliation remain in `use-financial-operation.ts`, independent of layout.

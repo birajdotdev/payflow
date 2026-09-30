@@ -35,6 +35,9 @@ function clear(logoutUnconfirmed = false) {
 
   void queryClient.cancelQueries()
   queryClient.clear()
+  for (const key of Object.keys(globalThis.sessionStorage ?? {})) {
+    if (key.startsWith('payflow-intent:')) sessionStorage.removeItem(key)
+  }
 
   emit()
 }

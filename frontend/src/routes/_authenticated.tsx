@@ -1,16 +1,14 @@
 import { useMutation } from '@tanstack/react-query'
 import {
   createFileRoute,
-  Link,
   Outlet,
   redirect,
   useRouter,
 } from '@tanstack/react-router'
-import { LayoutDashboard, LogOut, WalletCards } from 'lucide-react'
 
-import { Brand } from '@/components/brand'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SiteHeader } from '@/components/site-header'
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { safeReturn } from '@/features/auth/contracts'
 import { auth, useSession } from '@/features/auth/session'
 
@@ -23,7 +21,7 @@ export const Route = createFileRoute('/_authenticated')({
     if (!user)
       throw redirect({
         to: '/login',
-        search: { redirect: safeReturn(location.pathname), registered: false },
+        search: { redirect: safeReturn(location.href), registered: false },
       })
 
     return { user }
@@ -49,75 +47,18 @@ function ProtectedLayout() {
   if (!session.user) return null
 
   return (
-    <div className="min-h-svh bg-muted/30">
-      <header className="border-b bg-background">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <Brand />
-
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-muted-foreground sm:block">
-              {session.user.fullName}
-            </span>
-
-            <Button
-              variant="outline"
-              disabled={logout.isPending}
-              onClick={() => logout.mutate()}
-            >
-              <LogOut data-icon="inline-start" />
-              Log out
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 md:grid-cols-[180px_1fr]">
-        <aside className="flex flex-col gap-5">
-          <nav aria-label="Main navigation" className="flex gap-2 md:flex-col">
-            <Link
-              to="/dashboard"
-              className={buttonVariants({
-                variant: 'ghost',
-                className: 'justify-start',
-              })}
-              activeProps={{
-                'aria-current': 'page',
-                className: 'bg-accent',
-              }}
-            >
-              <LayoutDashboard data-icon="inline-start" />
-              Overview
-            </Link>
-
-            <Link
-              to="/wallet"
-              className={buttonVariants({
-                variant: 'ghost',
-                className: 'justify-start',
-              })}
-              activeProps={{
-                'aria-current': 'page',
-                className: 'bg-accent',
-              }}
-            >
-              <WalletCards data-icon="inline-start" />
-              My wallet
-            </Link>
-          </nav>
-
-          <Separator />
-
-          <p className="hidden text-xs leading-relaxed text-muted-foreground md:block">
-            Demo mode
-            <br />
-            All balances are simulated NPR funds.
-          </p>
-        </aside>
-
-        <main className="min-w-0">
+    <SidebarProvider>
+      <AppSidebar
+        user={session.user}
+        logout={() => logout.mutate()}
+        loggingOut={logout.isPending}
+      />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="@container/main flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8">
           <Outlet />
-        </main>
-      </div>
-    </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

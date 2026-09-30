@@ -56,6 +56,17 @@ export type LoginResponse = {
 
 export type RegisterResponse = Omit<User, 'status'> & { walletId: string }
 
-export function safeReturn(value: unknown): '/dashboard' | '/wallet' {
-  return value === '/wallet' ? '/wallet' : '/dashboard'
+export function safeReturn(value: unknown): string {
+  if (typeof value !== 'string' || value.includes('\\') || /[\r\n]/.test(value))
+    return '/dashboard'
+  const path = value.split('?')[0]
+  return [
+    '/dashboard',
+    '/wallet',
+    '/send',
+    '/transactions',
+    '/transactions/',
+  ].includes(path) || /^\/transactions\/[0-9a-f-]{36}$/i.test(path)
+    ? value
+    : '/dashboard'
 }
