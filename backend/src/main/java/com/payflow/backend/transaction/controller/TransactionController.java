@@ -38,6 +38,13 @@ public class TransactionController {
         return ApiResponse.of(transactions.history(type, status, fromDate, toDate, page, size));
     }
 
+    @GetMapping("/outcome")
+    @Operation(summary = "Look up your initiated operation by idempotency key; UNKNOWN does not imply failure")
+    public ApiResponse<com.payflow.backend.transaction.dto.OperationOutcome> outcome(
+            @RequestParam TransactionType operation, @RequestParam String key) {
+        return ApiResponse.of(transactions.outcome(operation, key));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get a receipt for a transaction involving your wallet")
     public ApiResponse<TransactionResponse> detail(@PathVariable UUID id) {

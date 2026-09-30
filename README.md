@@ -105,8 +105,13 @@ vp install --frozen-lockfile
 vp run dev
 ```
 
-Open <http://localhost:3000>. The scaffold currently has no API proxy or shared API
-client. See the [frontend README](frontend/README.md) for route generation, checks,
+Open <http://localhost:3000>. The frontend proxies `/api` to the backend on port 8080.
+For local HTTP development, `.env` must include
+`SESSION_TRUSTED_ORIGINS=http://localhost:3000,http://localhost:8080` and
+`SESSION_COOKIE_SECURE=false`. Restart the backend after changing these settings;
+the trusted origin is the browser URL, even when requests pass through the Vite proxy.
+Production must use exact HTTPS frontend origins and `SESSION_COOKIE_SECURE=true`.
+See the [frontend README](frontend/README.md) for route generation, checks,
 tests, and static build/hosting requirements.
 
 ## Register an account
@@ -537,3 +542,9 @@ curl -sS -b payflow-cookies.txt -c payflow-cookies.txt -X POST \
 ```
 
 Treat the local cookie jar as a credential and remove it after use.
+
+### Financial workflow and recovery
+
+The wallet page adds simulated NPR funds; `/send` transfers to a wallet UUID. `/transactions` supports bookmarked filters and pagination, and `/transactions/<id>` displays an owner/participant receipt. Successful mutations refresh wallet and activity queries.
+
+Each financial intent retains its exact decimal-string payload and idempotency key in a user-scoped query cache and tab session storage across navigation and reloads. Timeout, network, malformed-success, and server errors remain unknown; no mutation is automatically replayed. Check outcome calls `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER&key=...`. `FOUND` returns the committed receipt; `UNKNOWN` is not evidence of failure. An explicit retry submits the original payload and key, using the backend's existing serialized idempotency checks. Private intent state clears on logout/session loss. Restored intents remain unknown until checked or explicitly retried; restoration never submits a financial request.

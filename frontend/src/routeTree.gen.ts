@@ -14,7 +14,10 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedSendRouteImport } from './routes/_authenticated/send'
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
+import { Route as AuthenticatedTransactionsIndexRouteImport } from './routes/_authenticated/transactions.index'
+import { Route as AuthenticatedTransactionsTransactionIdRouteImport } from './routes/_authenticated/transactions.$transactionId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,25 +43,48 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSendRoute = AuthenticatedSendRouteImport.update({
+  id: '/send',
+  path: '/send',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTransactionsIndexRoute =
+  AuthenticatedTransactionsIndexRouteImport.update({
+    id: '/transactions/',
+    path: '/transactions/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedTransactionsTransactionIdRoute =
+  AuthenticatedTransactionsTransactionIdRouteImport.update({
+    id: '/transactions/$transactionId',
+    path: '/transactions/$transactionId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/send': typeof AuthenticatedSendRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
+  '/transactions/': typeof AuthenticatedTransactionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/send': typeof AuthenticatedSendRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
+  '/transactions': typeof AuthenticatedTransactionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -67,13 +93,32 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/send': typeof AuthenticatedSendRoute
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
+  '/_authenticated/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
+  '/_authenticated/transactions/': typeof AuthenticatedTransactionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/dashboard' | '/wallet'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/dashboard'
+    | '/send'
+    | '/wallet'
+    | '/transactions/$transactionId'
+    | '/transactions/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/dashboard' | '/wallet'
+  to:
+    | '/'
+    | '/login'
+    | '/register'
+    | '/dashboard'
+    | '/send'
+    | '/wallet'
+    | '/transactions/$transactionId'
+    | '/transactions'
   id:
     | '__root__'
     | '/'
@@ -81,7 +126,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authenticated/dashboard'
+    | '/_authenticated/send'
     | '/_authenticated/wallet'
+    | '/_authenticated/transactions/$transactionId'
+    | '/_authenticated/transactions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -128,6 +176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/send': {
+      id: '/_authenticated/send'
+      path: '/send'
+      fullPath: '/send'
+      preLoaderRoute: typeof AuthenticatedSendRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/wallet': {
       id: '/_authenticated/wallet'
       path: '/wallet'
@@ -135,17 +190,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWalletRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/transactions/': {
+      id: '/_authenticated/transactions/'
+      path: '/transactions'
+      fullPath: '/transactions/'
+      preLoaderRoute: typeof AuthenticatedTransactionsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/transactions/$transactionId': {
+      id: '/_authenticated/transactions/$transactionId'
+      path: '/transactions/$transactionId'
+      fullPath: '/transactions/$transactionId'
+      preLoaderRoute: typeof AuthenticatedTransactionsTransactionIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedSendRoute: typeof AuthenticatedSendRoute
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute
+  AuthenticatedTransactionsTransactionIdRoute: typeof AuthenticatedTransactionsTransactionIdRoute
+  AuthenticatedTransactionsIndexRoute: typeof AuthenticatedTransactionsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedSendRoute: AuthenticatedSendRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
+  AuthenticatedTransactionsTransactionIdRoute:
+    AuthenticatedTransactionsTransactionIdRoute,
+  AuthenticatedTransactionsIndexRoute: AuthenticatedTransactionsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

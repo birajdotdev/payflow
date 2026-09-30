@@ -69,6 +69,34 @@ class TransactionTests {
     }
 
     @Test
+    void outcomeLookupScopesKeysToInitiatorAndNeverTreatsAbsenceAsFailure() throws Exception {
+        mvc.perform(get(URL + "/outcome").header("Authorization", "Bearer " + token)
+            .param("operation", "DEPOSIT")
+            .param("key", "fund"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.state").value("FOUND"))
+            .andExpect(jsonPath("$.data.transaction.transactionId").value(depositId));
+        mvc.perform(get(URL + "/outcome").header("Authorization", "Bearer " + token)
+            .param("operation", "TRANSFER")
+            .param("key", "send"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.transaction.transactionId").value(transferId));
+        for (String caller : new String[] { bob, carol }) {
+            mvc.perform(get(URL + "/outcome").header("Authorization", "Bearer " + caller)
+                .param("operation", "TRANSFER")
+                .param("key", "send"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.state").value("UNKNOWN"))
+                .andExpect(jsonPath("$.data.transaction").doesNotExist());
+        }
+        mvc.perform(get(URL + "/outcome").header("Authorization", "Bearer " + token)
+            .param("operation", "DEPOSIT")
+            .param("key", "missing")).andExpect(status().isOk()).andExpect(jsonPath("$.data.state").value("UNKNOWN"));
+        mvc.perform(get(URL + "/outcome").param("operation", "DEPOSIT").param("key", "fund"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void aliceSeesDepositAndOutgoingTransferBobSeesIncomingAndBothCanReadReceipt() throws Exception {
         var alice = receipt(history(token).andExpect(status().isOk())
             .andExpect(jsonPath("$.data.totalElements").value(2))
