@@ -36,6 +36,9 @@ public class FinancialTransaction {
     @Column(name = "receiver_wallet_id", updatable = false)
     private UUID receiverWalletId;
 
+    @Column(name = "payment_request_id", updatable = false)
+    private UUID paymentRequestId;
+
     @Column(nullable = false, precision = 19, scale = 2, updatable = false)
     private BigDecimal amount;
 
@@ -63,6 +66,14 @@ public class FinancialTransaction {
         transaction.type = TransactionType.TRANSFER;
         transaction.senderWalletId = sender;
         transaction.description = description;
+        return transaction;
+    }
+
+    public static FinancialTransaction merchantPayment(UUID sender, UUID receiver, UUID requestId, BigDecimal amount,
+            String description, String key) {
+        var transaction = transfer(sender, receiver, amount, description, key);
+        transaction.type = TransactionType.MERCHANT_PAYMENT;
+        transaction.paymentRequestId = requestId;
         return transaction;
     }
 

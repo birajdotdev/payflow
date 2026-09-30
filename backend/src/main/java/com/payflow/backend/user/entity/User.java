@@ -49,6 +49,11 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    public void becomeMerchant() {
+        if (role == UserRole.USER)
+            role = UserRole.MERCHANT;
+    }
+
     @PrePersist
     protected void onCreate() {
         Instant now = Instant.now();

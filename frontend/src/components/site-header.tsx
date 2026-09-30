@@ -9,17 +9,21 @@ export function SiteHeader() {
     select: (state) => state.location.pathname,
   })
   const title =
-    pathname.startsWith('/transactions/') && pathname !== '/transactions/'
-      ? 'Transaction receipt'
-      : pathname.startsWith('/transactions')
-        ? 'Transactions'
-        : pathname === '/send'
-          ? 'Send money'
-          : pathname === '/wallet'
-            ? 'My wallet'
-            : pathname === '/profile'
-              ? 'Profile'
-              : 'Overview'
+    pathname === '/merchant'
+      ? 'Merchant'
+      : pathname.startsWith('/payments/')
+        ? 'Merchant payment'
+        : pathname.startsWith('/transactions/') && pathname !== '/transactions/'
+          ? 'Transaction receipt'
+          : pathname.startsWith('/transactions')
+            ? 'Transactions'
+            : pathname === '/send'
+              ? 'Send money'
+              : pathname === '/wallet'
+                ? 'My wallet'
+                : pathname === '/profile'
+                  ? 'Profile'
+                  : 'Overview'
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b">
       <div className="flex w-full items-center gap-3 px-4 sm:px-6">

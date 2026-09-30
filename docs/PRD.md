@@ -2,7 +2,7 @@
 
 ## PayFlow — Digital Wallet & Payment Platform
 
-**Document Version:** 1.4\
+**Document Version:** 1.5\
 **Last Updated:** 2026-09-30\
 **Product Type:** Fintech / Digital Wallet Platform  
 **Primary Objective:** Portfolio and learning project demonstrating production-oriented Java Spring Boot backend development  
@@ -635,7 +635,9 @@ Pagination is required.
 
 # 19. Merchant Accounts
 
-Merchant users shall have merchant profiles.
+Merchant users shall have merchant profiles. For the simulated Phase 2 workflow, `POST /api/v1/merchants` enrolls the authenticated USER using `businessName`, `contactEmail`, and `contactNumber`. Spring Boot binds the profile to that user's existing primary wallet and assigns MERCHANT atomically; callers cannot choose an owner, wallet, role, status, or balance. ADMIN accounts cannot enroll. One profile per account is enforced in PostgreSQL. Repeating identical enrollment returns the same profile; changed enrollment returns `409 / MERCHANT_EXISTS`.
+
+`GET /api/v1/merchants/me` retrieves your profile (404 before enrollment). `GET /api/v1/merchants/{id}` exposes business contact details and the shareable wallet identifier to authenticated users, without account-private details or balances. Merchant list/create/cancel operations require the current MERCHANT role and enforce ownership in the service.
 
 Merchant information may contain:
 
@@ -665,7 +667,7 @@ Merchants may create payment requests.
 Example:
 
 ```text
-POST /api/v1/merchant/payment-requests
+POST /api/v1/merchants/payment-requests
 ```
 
 Request:
@@ -688,7 +690,13 @@ Response:
 }
 ```
 
-Customers shall be able to complete the payment using their wallet.
+Customers shall be able to complete the payment using their wallet. Payment requests use UUID identifiers and immutable amounts/descriptions, with a default expiration 24 hours after creation; the API optionally accepts a future ISO-8601 `expiresAt`.
+
+`GET /api/v1/payments/{paymentRequestId}` returns the merchant business name, amount, currency, description, effective status, expiration, and request ID. A committed `transactionId` is included only for the merchant or paying customer. Other authenticated viewers cannot retrieve the payer's receipt.
+
+`POST /api/v1/payments/{paymentRequestId}/pay` requires `Idempotency-Key`; it has no client-supplied amount or recipient. Eligible payers are USER and MERCHANT accounts paying a different wallet. The backend reads the request amount, atomically debits/credits the wallets, creates a SUCCESS / MERCHANT_PAYMENT receipt linked to the request, and marks the request PAID. The response is the standard transaction receipt envelope, including `paymentRequestId`.
+
+Keys are scoped to payer and operation. A same-key retry for the same request returns the original receipt, including after later expiration or wallet freezing. Reusing a key for another request returns `409 / IDEMPOTENCY_CONFLICT`. A new key or another customer attempting a paid request returns `409 / PAYMENT_REQUEST_PAID` without moving money. Recovery reads support `GET /api/v1/transactions/outcome?operation=MERCHANT_PAYMENT&key=...`; UNKNOWN never implies failure.
 
 ---
 
@@ -703,7 +711,9 @@ EXPIRED
 CANCELLED
 ```
 
-A payment request that has already been paid must not be processed again.
+A payment request that has already been paid must not be processed again. The payment service locks the request first, then locks both wallets in UUID order until commit. PostgreSQL also enforces one transaction per payment request and one MERCHANT_PAYMENT per payer/idempotency key. This covers same-key retries, different-key attempts, different customers, and concurrent spending with existing transfers/deposits.
+
+Expiration is derived from the deadline for PENDING requests on reads and checked again during locked payment/cancellation; no background expiry job is required. `POST /api/v1/merchants/payment-requests/{id}/cancel` is owner-only and serializes with payment. Repeated cancellation succeeds; PAID and EXPIRED requests cannot be cancelled. Cancelled/expired requests cannot move money. Failed payments roll back all changes and leave the key reusable.
 
 ---
 
@@ -1041,8 +1051,11 @@ Merchant:
 
 ```text
 POST /merchants
+GET  /merchants/me
 GET  /merchants/{id}
 POST /merchants/payment-requests
+GET  /merchants/payment-requests
+POST /merchants/payment-requests/{id}/cancel
 GET  /merchants/payments
 ```
 
@@ -1639,7 +1652,7 @@ The frontend shall use TanStack Router file-based routing with typed navigation,
 | Transaction Details / Receipt | `/transactions/$transactionId` | Authenticated owner/participant | MVP |
 | Profile | `/profile` | Authenticated; view current profile | MVP |
 | Merchant Payment | `/payments/$paymentRequestId` | Authenticated eligible payer | Phase 2 |
-| Merchant Dashboard | `/merchant` | MERCHANT | Phase 2 |
+| Merchant Dashboard / Enrollment | `/merchant` | USER enrollment; MERCHANT dashboard | Phase 2 |
 | Admin Dashboard | `/admin` | ADMIN | Phase 2 |
 
 `$transactionId` and `$paymentRequestId` denote TanStack Router path parameters. Browser paths are distinct from `/api/v1` endpoints. Merchant and admin routes follow the backend feature phases and are not required to complete the SPA migration.
@@ -1960,7 +1973,7 @@ A useful architecture diagram should also be included.
 
 **PayFlow — Digital Wallet & Payment Platform**
 
-Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transfer confirmation, transaction history and receipts. Merchant payment workflows remain Phase 2 scope.
+Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transfer confirmation, transaction history and receipts. Phase 2 now includes merchant enrollment, payment requests, customer payments, and shared merchant-payment receipts.
 
 Implemented **atomic financial transactions, BigDecimal-based monetary calculations, idempotent payment requests and concurrency controls** to prevent duplicate transactions and inconsistent wallet balances.
 
@@ -2073,7 +2086,7 @@ The session/history browser cases simulate expiry responses at the browser API b
 
 ## Remaining Post-MVP Work
 
-- Phase 2 merchant accounts/payment requests, merchant-payment receipts/refunds, admin tooling, account freezing, advanced filtering/audit logs, and email notifications.
+- Remaining Phase 2 work: refunds, admin tooling, account freezing, advanced filtering/audit logs, and email notifications. Merchant profiles, requests, payment, and receipts/dashboard are implemented in section 56.
 - Phase 3 caching, messaging, observability, rate limiting, Kubernetes, and cloud deployment.
 - Security enhancements from section 47: complex cross-tab coordination, strict refresh rotation/token-family reuse detection, advanced lost-response/race recovery, session-management UI, and logout-all-devices.
 - Separate-origin browser hosting would require explicit credentialed CORS/preflight configuration and tests; the shipped MVP uses same-origin API forwarding.
@@ -2084,6 +2097,24 @@ The bounded reusable MVP refresh-token policy is intentional. Cookie security, C
 
 The following pre-existing contract/scope gaps are retained for explicit resolution rather than silently changing unrelated requirements:
 
-- Section 20 uses `/api/v1/merchant/payment-requests`, while section 28 uses `/api/v1/merchants/payment-requests`. Choose one backend endpoint spelling before implementing the Phase 2 merchant UI.
+- Resolved: merchant APIs use the plural `/api/v1/merchants` namespace consistently, including `/api/v1/merchants/payment-requests`. The browser dashboard remains `/merchant`.
 - Resolved: MVP receipts cover deposits and P2P transfers; Phase 2 payment receipts refer specifically to merchant payments.
-- Resolved: `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER&key=<Idempotency-Key>` requires authentication and scopes deposits to the current receiver wallet and transfers to the current sender wallet. It returns the standard envelope with `{state: "FOUND", transaction: <receipt>}` for a committed operation, or `{state: "UNKNOWN", transaction: null}` otherwise. UNKNOWN includes uncommitted, absent, and rolled-back requests and must never imply failure. The browser keeps the exact payload/key, offers another read or an explicit same-key retry, and never automatically replays. A same-key retry remains safe even if the original request is still running because existing wallet locks and idempotency checks serialize execution. Transaction receipts in MVP cover deposits and P2P transfers; Phase 2 payment receipts refer to merchant payments.
+- Resolved: `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER|MERCHANT_PAYMENT&key=<Idempotency-Key>` requires authentication and scopes deposits to the current receiver wallet and transfers/merchant payments to the current sender wallet. It returns the standard envelope with `{state: "FOUND", transaction: <receipt>}` for a committed operation, or `{state: "UNKNOWN", transaction: null}` otherwise. UNKNOWN includes uncommitted, absent, and rolled-back requests and must never imply failure. The browser keeps the exact payload/key, offers another read or an explicit same-key retry, and never automatically replays. A same-key retry remains safe even if the original request is still running because existing wallet locks and idempotency checks serialize execution. Transaction receipts in MVP cover deposits and P2P transfers; Phase 2 payment receipts refer to merchant payments.
+
+
+---
+
+# 56. Phase 2 — Merchant Payments
+
+**Status: merchant payment slice implemented — 2026-09-30.** The plural endpoint contract was resolved before implementation. This slice covers merchant profiles → payment requests → customer payment → merchant receipt/dashboard; refunds and other Phase 2 work remain deferred.
+
+- Flyway V6 adds merchant profiles, payment requests, the immutable receipt/request link, operation-scoped idempotency, and request uniqueness constraints.
+- `/merchant` provides enrollment, fixed-amount request creation, shareable customer links, cancellation, paginated requests, and paginated incoming payments with participant receipts. Enrollment and request creation use dialogs. Request and incoming-payment lists share the shadcn/TanStack data-table renderer. Receipt actions open previews with a full-page route available. Its wallet and request/payment queries refresh every 10 seconds and on demand.
+- `/payments/$paymentRequestId` displays backend request details before explicit confirmation. It preserves each ambiguous payment's original payload/key across navigation/reload, offers read-only outcome reconciliation or an explicit same-key retry, and never pays from route loading or prefetching.
+- Merchant payments appear in ordinary transaction history and shared participant receipts. Other customers may inspect a shared request's status, but cannot see the payer's receipt.
+- PostgreSQL integration coverage includes a customer starting with NPR 1,000.00 paying NPR 250.25, resulting in NPR 749.75 and NPR 250.25 with one settlement, plus retry/concurrency and injected-failure rollback scenarios. The browser acceptance commits a payment but drops its response, reloads without replaying, explicitly retries the original key, and checks both balances and the merchant/customer receipt.
+
+See [merchant acceptance scenario](merchant-payments-acceptance.md), [PostgreSQL tests](../backend/src/test/java/com/payflow/backend/payment/MerchantPaymentTests.java), and [browser acceptance](../frontend/e2e/merchant.spec.ts).
+
+
+Validation for this slice: `./mvnw verify` passed all 168 backend tests (including 25 merchant-payment cases); `pnpm exec vp check`, all 39 frontend tests, and the production build passed. All 7 Playwright tests passed against the rebuilt nginx/Compose stack at `http://localhost:13000`, including the merchant lost-response acceptance.

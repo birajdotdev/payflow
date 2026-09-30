@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -6,6 +5,7 @@ import {
   Plus,
   ShieldCheck,
 } from 'lucide-react'
+import { useEffect } from 'react'
 
 import { ErrorNotice } from '@/components/feedback'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -36,8 +36,17 @@ import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { WalletId } from '@/components/wallet-id'
 
+import { ReceiptDialog } from './receipt-dialog'
 import { useFinancialOperation } from './use-financial-operation'
-export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
+export function FundingScreen({
+  transfer = false,
+  compact = false,
+  onStateChange,
+}: {
+  transfer?: boolean
+  compact?: boolean
+  onStateChange?: (state: { pending: boolean; unknown: boolean }) => void
+}) {
   const {
     form,
     review,
@@ -52,18 +61,25 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
     startAnother,
     retryOriginal,
   } = useFinancialOperation(transfer)
-  const formCard = (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {transfer ? 'Transfer details' : 'Add demo funds'}
-        </CardTitle>
-        <CardDescription>
-          {transfer
-            ? 'Send NPR directly to another PayFlow wallet.'
-            : 'Top up your wallet with simulated NPR funds.'}
-        </CardDescription>
-      </CardHeader>
+  const pending = mutation.isPending || lookup.isPending
+  useEffect(() => {
+    onStateChange?.({ pending, unknown })
+  }, [onStateChange, pending, unknown])
+
+  const formContent = (
+    <>
+      {!compact && (
+        <CardHeader>
+          <CardTitle>
+            {transfer ? 'Transfer details' : 'Add demo funds'}
+          </CardTitle>
+          <CardDescription>
+            {transfer
+              ? 'Send NPR directly to another PayFlow wallet.'
+              : 'Top up your wallet with simulated NPR funds.'}
+          </CardDescription>
+        </CardHeader>
+      )}
       <CardContent className="flex flex-col gap-6">
         {review ? (
           <section aria-label="Transfer review" className="flex flex-col gap-6">
@@ -207,9 +223,11 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
             </FieldGroup>
           </form>
         )}
-        {mutation.error && !unknown && <ErrorNotice error={mutation.error} />}
+        {mutation.error && !unknown && (
+          <ErrorNotice inline error={mutation.error} />
+        )}
         {unknown && intent && (
-          <Alert role="status">
+          <Alert variant="warning" role="status">
             <CircleHelp />
             <AlertTitle>Outcome unknown</AlertTitle>
             <AlertDescription className="flex flex-col gap-4">
@@ -246,7 +264,7 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
                   failed.
                 </p>
               )}
-              {lookup.error && <ErrorNotice error={lookup.error} />}
+              {lookup.error && <ErrorNotice inline error={lookup.error} />}
               <details className="text-xs">
                 <summary>Request details</summary>
                 <p className="mt-2 break-all">Operation key: {intent.key}</p>
@@ -255,24 +273,13 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
           </Alert>
         )}
         {receipt && (
-          <Alert role="status">
+          <Alert variant="success" role="status">
             <CheckCircle2 />
             <AlertTitle>Operation confirmed.</AlertTitle>
             <AlertDescription>
               <p>Your transaction is recorded and your wallet is updating.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  nativeButton={false}
-                  render={
-                    <Link
-                      to="/transactions/$transactionId"
-                      params={{ transactionId: receipt }}
-                    />
-                  }
-                >
-                  View receipt
-                </Button>
+                <ReceiptDialog transactionId={receipt} />
                 <Button size="sm" variant="outline" onClick={startAnother}>
                   Start another operation
                 </Button>
@@ -285,8 +292,9 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
         <ShieldCheck className="size-4" />
         Simulated funds · No real money is moved
       </CardFooter>
-    </Card>
+    </>
   )
+  const formCard = compact ? formContent : <Card>{formContent}</Card>
   if (!transfer) return formCard
   return (
     <div className="flex flex-col gap-6">

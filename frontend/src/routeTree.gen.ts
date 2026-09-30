@@ -14,9 +14,11 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedMerchantRouteImport } from './routes/_authenticated/merchant'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedSendRouteImport } from './routes/_authenticated/send'
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
+import { Route as AuthenticatedPaymentsPaymentRequestIdRouteImport } from './routes/_authenticated/payments.$paymentRequestId'
 import { Route as AuthenticatedTransactionsIndexRouteImport } from './routes/_authenticated/transactions.index'
 import { Route as AuthenticatedTransactionsTransactionIdRouteImport } from './routes/_authenticated/transactions.$transactionId'
 
@@ -44,6 +46,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMerchantRoute = AuthenticatedMerchantRouteImport.update({
+  id: '/merchant',
+  path: '/merchant',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -59,6 +66,12 @@ const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   path: '/wallet',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedPaymentsPaymentRequestIdRoute =
+  AuthenticatedPaymentsPaymentRequestIdRouteImport.update({
+    id: '/payments/$paymentRequestId',
+    path: '/payments/$paymentRequestId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedTransactionsIndexRoute =
   AuthenticatedTransactionsIndexRouteImport.update({
     id: '/transactions/',
@@ -77,9 +90,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/merchant': typeof AuthenticatedMerchantRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/send': typeof AuthenticatedSendRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/payments/$paymentRequestId': typeof AuthenticatedPaymentsPaymentRequestIdRoute
   '/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
   '/transactions/': typeof AuthenticatedTransactionsIndexRoute
 }
@@ -88,9 +103,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/merchant': typeof AuthenticatedMerchantRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/send': typeof AuthenticatedSendRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/payments/$paymentRequestId': typeof AuthenticatedPaymentsPaymentRequestIdRoute
   '/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
   '/transactions': typeof AuthenticatedTransactionsIndexRoute
 }
@@ -101,9 +118,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/merchant': typeof AuthenticatedMerchantRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/send': typeof AuthenticatedSendRoute
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
+  '/_authenticated/payments/$paymentRequestId': typeof AuthenticatedPaymentsPaymentRequestIdRoute
   '/_authenticated/transactions/$transactionId': typeof AuthenticatedTransactionsTransactionIdRoute
   '/_authenticated/transactions/': typeof AuthenticatedTransactionsIndexRoute
 }
@@ -114,9 +133,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/dashboard'
+    | '/merchant'
     | '/profile'
     | '/send'
     | '/wallet'
+    | '/payments/$paymentRequestId'
     | '/transactions/$transactionId'
     | '/transactions/'
   fileRoutesByTo: FileRoutesByTo
@@ -125,9 +146,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/dashboard'
+    | '/merchant'
     | '/profile'
     | '/send'
     | '/wallet'
+    | '/payments/$paymentRequestId'
     | '/transactions/$transactionId'
     | '/transactions'
   id:
@@ -137,9 +160,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/_authenticated/dashboard'
+    | '/_authenticated/merchant'
     | '/_authenticated/profile'
     | '/_authenticated/send'
     | '/_authenticated/wallet'
+    | '/_authenticated/payments/$paymentRequestId'
     | '/_authenticated/transactions/$transactionId'
     | '/_authenticated/transactions/'
   fileRoutesById: FileRoutesById
@@ -188,6 +213,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/merchant': {
+      id: '/_authenticated/merchant'
+      path: '/merchant'
+      fullPath: '/merchant'
+      preLoaderRoute: typeof AuthenticatedMerchantRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/profile': {
       id: '/_authenticated/profile'
       path: '/profile'
@@ -209,6 +241,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWalletRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/payments/$paymentRequestId': {
+      id: '/_authenticated/payments/$paymentRequestId'
+      path: '/payments/$paymentRequestId'
+      fullPath: '/payments/$paymentRequestId'
+      preLoaderRoute: typeof AuthenticatedPaymentsPaymentRequestIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/transactions/': {
       id: '/_authenticated/transactions/'
       path: '/transactions'
@@ -228,18 +267,23 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedMerchantRoute: typeof AuthenticatedMerchantRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSendRoute: typeof AuthenticatedSendRoute
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute
+  AuthenticatedPaymentsPaymentRequestIdRoute: typeof AuthenticatedPaymentsPaymentRequestIdRoute
   AuthenticatedTransactionsTransactionIdRoute: typeof AuthenticatedTransactionsTransactionIdRoute
   AuthenticatedTransactionsIndexRoute: typeof AuthenticatedTransactionsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedMerchantRoute: AuthenticatedMerchantRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSendRoute: AuthenticatedSendRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
+  AuthenticatedPaymentsPaymentRequestIdRoute:
+    AuthenticatedPaymentsPaymentRequestIdRoute,
   AuthenticatedTransactionsTransactionIdRoute:
     AuthenticatedTransactionsTransactionIdRoute,
   AuthenticatedTransactionsIndexRoute: AuthenticatedTransactionsIndexRoute,

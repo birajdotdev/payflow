@@ -41,8 +41,10 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
   return (
     <ToastPrimitive.Root
       data-slot="toast"
+      data-type={props.toast.type}
       className={cn(
         'group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        'data-[type=error]:border-destructive/30 data-[type=error]:bg-popover data-[type=error]:text-destructive data-[type=success]:border-success-border data-[type=success]:bg-success data-[type=success]:text-success-foreground data-[type=warning]:border-warning-border data-[type=warning]:bg-warning data-[type=warning]:text-warning-foreground [&[data-type=error]_[data-slot=toast-description]]:text-destructive [&[data-type=success]_[data-slot=toast-description]]:text-success-foreground [&[data-type=warning]_[data-slot=toast-description]]:text-warning-foreground',
         '[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]',
         'h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]',
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -185,7 +187,7 @@ function ToastList() {
           <ToastTitle />
           <ToastDescription />
         </div>
-        <ToastAction />
+        {toastItem.actionProps && <ToastAction />}
         <ToastClose />
       </ToastContent>
     </Toast>

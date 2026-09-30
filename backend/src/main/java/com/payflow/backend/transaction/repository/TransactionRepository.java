@@ -23,4 +23,9 @@ public interface TransactionRepository
     Optional<FinancialTransaction> findByReceiverWalletIdAndTypeAndIdempotencyKey(UUID walletId, TransactionType type,
             String idempotencyKey);
 
+    Optional<FinancialTransaction> findByPaymentRequestId(UUID paymentRequestId);
+
+    org.springframework.data.domain.Page<FinancialTransaction> findByReceiverWalletIdAndType(UUID walletId,
+            TransactionType type, org.springframework.data.domain.Pageable pageable);
+
 }

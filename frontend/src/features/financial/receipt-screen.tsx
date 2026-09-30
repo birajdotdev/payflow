@@ -21,15 +21,6 @@ import { formatMoney } from '@/features/wallet/queries'
 import type { Transaction } from '@/features/wallet/queries'
 import { request } from '@/lib/api'
 export function ReceiptScreen({ transactionId }: { transactionId: string }) {
-  const user = useSession().user!
-  const query = useQuery({
-    queryKey: ['private', user.userId, 'transactions', transactionId],
-    queryFn: ({ signal }) =>
-      request<Transaction>(
-        `/transactions/${encodeURIComponent(transactionId)}`,
-        { signal }
-      ),
-  })
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <div>
@@ -53,60 +44,93 @@ export function ReceiptScreen({ transactionId }: { transactionId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          {query.isPending ? (
-            <div aria-label="Loading receipt" className="flex flex-col gap-4">
-              <Skeleton className="mx-auto h-10 w-48" />
-              <Skeleton className="h-48 w-full" />
-            </div>
-          ) : query.error ? (
-            <ErrorNotice
-              error={query.error}
-              retry={() => {
-                void query.refetch()
-              }}
-            />
-          ) : (
-            <>
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-3xl font-semibold tabular-nums">
-                  {formatMoney(query.data.amount, query.data.currency)}
-                </p>
-                <TransactionStatus status={query.data.status} />
-              </div>
-              <Separator />
-              <dl className="grid gap-5 sm:grid-cols-2">
-                {Object.entries({
-                  Reference: query.data.reference,
-                  Type:
-                    query.data.type === 'DEPOSIT'
-                      ? 'Demo deposit'
-                      : 'Wallet transfer',
-                  Sender: query.data.senderWalletId ?? 'Demo funding',
-                  Recipient: query.data.receiverWalletId,
-                  Description: query.data.description ?? '—',
-                  Created: new Date(query.data.createdAt).toLocaleString(),
-                  'Transaction ID': query.data.transactionId,
-                }).map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="text-xs text-muted-foreground">{label}</dt>
-                    <dd className="mt-1 text-sm break-all">
-                      {(label === 'Sender' && query.data.senderWalletId) ||
-                      (label === 'Recipient' && query.data.receiverWalletId) ? (
-                        <WalletId value={value!} label={`${label} wallet ID`} />
-                      ) : (
-                        value
-                      )}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </>
-          )}
+          <ReceiptContent transactionId={transactionId} />
         </CardContent>
         <CardFooter className="justify-center text-xs text-muted-foreground">
           Simulated funds · No real money was moved
         </CardFooter>
       </Card>
+    </div>
+  )
+}
+
+export function ReceiptContent({ transactionId }: { transactionId: string }) {
+  const user = useSession().user!
+  const query = useQuery({
+    queryKey: ['private', user.userId, 'transactions', transactionId],
+    queryFn: ({ signal }) =>
+      request<Transaction>(
+        `/transactions/${encodeURIComponent(transactionId)}`,
+        { signal }
+      ),
+  })
+  return (
+    <div className="flex flex-col gap-6">
+      {query.isPending ? (
+        <div aria-label="Loading receipt" className="flex flex-col gap-4">
+          <Skeleton className="mx-auto h-10 w-48" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      ) : query.error ? (
+        <ErrorNotice
+          error={query.error}
+          retry={() => {
+            void query.refetch()
+          }}
+        />
+      ) : (
+        <>
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-3xl font-semibold tabular-nums">
+              {formatMoney(query.data.amount, query.data.currency)}
+            </p>
+            <TransactionStatus status={query.data.status} />
+          </div>
+          <Separator />
+          <dl className="grid gap-5 sm:grid-cols-2">
+            {Object.entries({
+              Reference: query.data.reference,
+              Type:
+                query.data.type === 'DEPOSIT'
+                  ? 'Demo deposit'
+                  : query.data.type === 'MERCHANT_PAYMENT'
+                    ? 'Merchant payment'
+                    : 'Wallet transfer',
+              Sender: query.data.senderWalletId ?? 'Demo funding',
+              Recipient: query.data.receiverWalletId,
+              Description: query.data.description ?? '—',
+              Created: new Date(query.data.createdAt).toLocaleString(),
+              'Transaction ID': query.data.transactionId,
+            }).map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="mt-1 text-sm break-all">
+                  {(label === 'Sender' && query.data.senderWalletId) ||
+                  (label === 'Recipient' && query.data.receiverWalletId) ? (
+                    <WalletId value={value!} label={`${label} wallet ID`} />
+                  ) : (
+                    value
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {query.data.paymentRequestId && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/payments/$paymentRequestId"
+                  params={{ paymentRequestId: query.data.paymentRequestId }}
+                />
+              }
+            >
+              View merchant payment request
+            </Button>
+          )}
+        </>
+      )}
     </div>
   )
 }

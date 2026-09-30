@@ -53,7 +53,10 @@ it('renders a server page without slicing again and advances controlled paginati
   expect(screen.getByText('− NPR 99,999,999,999,999,999.99')).toBeDefined()
   expect(screen.getByText('Completed')).toBeDefined()
   expect(
-    screen.getByLabelText('View receipt PF-123').getAttribute('href')
+    screen.getByRole('button', { name: 'View receipt PF-123' })
+  ).toBeDefined()
+  expect(
+    screen.getByRole('link', { name: 'Transfer sent' }).getAttribute('href')
   ).toBe('/transactions/receipt-1')
   await userEvent.click(screen.getByRole('button', { name: 'Next' }))
   const updater = change.mock.calls[0][0]

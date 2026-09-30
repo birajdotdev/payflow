@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, RefreshCw } from 'lucide-react'
 
 import { DataTable } from '@/components/data-table'
 import { ErrorNotice } from '@/components/feedback'
@@ -18,7 +18,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { WalletId } from '@/components/wallet-id'
 import { useSession } from '@/features/auth/session'
-import { FundingScreen } from '@/features/financial/funding-screen'
+import { FundingDialog } from '@/features/financial/funding-dialog'
 
 import {
   activityQuery,
@@ -62,16 +62,7 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
             <RefreshCw data-icon="inline-start" />
             Refresh
           </Button>
-          {overview && (
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<Link to="/wallet" />}
-            >
-              <Plus data-icon="inline-start" />
-              Add funds
-            </Button>
-          )}
+          <FundingDialog />
           <Button nativeButton={false} render={<Link to="/send" />}>
             <ArrowUpRight data-icon="inline-start" />
             Send money
@@ -202,7 +193,27 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
               Demo wallet · No real money is held or moved.
             </CardFooter>
           </Card>
-          <FundingScreen />
+          <Card>
+            <CardHeader>
+              <CardTitle>Ready when you are</CardTitle>
+              <CardDescription>
+                Your wallet number is all you need to receive a transfer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Share your wallet number with someone you trust, or use a
+                merchant payment link for your business.
+              </p>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link to="/merchant" />}
+              >
+                Explore merchant payments
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

@@ -15,16 +15,26 @@ import {
 } from './operation'
 import type { Intent } from './operation'
 
-export function useFinancialOperation(transfer: boolean) {
+export function useFinancialOperation(
+  transfer: boolean,
+  payment?: { paymentRequestId: string; amount: string }
+) {
   const user = useSession().user!
+
   const client = useQueryClient()
-  const intentKey = [
-    'private',
-    user.userId,
-    'intent',
-    transfer ? 'TRANSFER' : 'DEPOSIT',
-  ]
-  const storageKey = `payflow-intent:${user.userId}:${transfer ? 'TRANSFER' : 'DEPOSIT'}`
+
+  const operation = payment
+    ? 'MERCHANT_PAYMENT'
+    : transfer
+      ? 'TRANSFER'
+      : 'DEPOSIT'
+
+  const scope = payment ? `${operation}:${payment.paymentRequestId}` : operation
+
+  const intentKey = ['private', user.userId, 'intent', scope]
+
+  const storageKey = `payflow-intent:${user.userId}:${scope}`
+
   const stored = useQuery<Intent | null>({
     queryKey: intentKey,
     queryFn: () => null,
@@ -33,7 +43,9 @@ export function useFinancialOperation(transfer: boolean) {
         const saved = savedIntentSchema.parse(
           JSON.parse(sessionStorage.getItem(storageKey) ?? 'null')
         )
-        return saved.operation === (transfer ? 'TRANSFER' : 'DEPOSIT')
+        return saved.operation === operation &&
+          (!payment ||
+            saved.payload.paymentRequestId === payment.paymentRequestId)
           ? saved
           : null
       } catch {
@@ -43,15 +55,21 @@ export function useFinancialOperation(transfer: boolean) {
     enabled: false,
     gcTime: Infinity,
   })
+
   const intent = stored.data ?? null
+
   const setIntent = (value: Intent | null) => {
     if (value) sessionStorage.setItem(storageKey, JSON.stringify(value))
     else sessionStorage.removeItem(storageKey)
     client.setQueryData(intentKey, value)
   }
+
   const [review, setReview] = useState<Intent['payload'] | null>(null)
+
   const [uncertain, setUnknown] = useState(false)
+
   const [receipt, setReceipt] = useState<string | null>(null)
+
   const complete = (id: string) => {
     setReceipt(id)
     setUnknown(false)
@@ -62,7 +80,14 @@ export function useFinancialOperation(transfer: boolean) {
     void client.invalidateQueries({
       queryKey: ['private', user.userId, 'transactions'],
     })
+    void client.invalidateQueries({
+      queryKey: ['private', user.userId, 'merchant'],
+    })
+    void client.invalidateQueries({
+      queryKey: ['private', user.userId, 'payments'],
+    })
   }
+
   const mutation = useMutation({
     mutationFn: submitIntent,
     retry: false,
@@ -72,6 +97,7 @@ export function useFinancialOperation(transfer: boolean) {
       else setIntent(null)
     },
   })
+
   const lookup = useMutation({
     mutationFn: lookupIntent,
     retry: false,
@@ -80,12 +106,14 @@ export function useFinancialOperation(transfer: boolean) {
         complete(result.transaction.transactionId)
     },
   })
+
   const schema = financialSchema.extend({
     amount: amountSchema(transfer ? 1000000 : 100000),
     receiverWalletId: transfer
       ? z.uuid('Enter a valid wallet UUID.')
       : z.string(),
   })
+
   const form = useForm({
     defaultValues: {
       amount: intent?.payload.amount ?? '',
@@ -108,11 +136,24 @@ export function useFinancialOperation(transfer: boolean) {
       await mutation.mutateAsync(saved).catch(() => undefined)
     },
   })
+
   const unknown =
     uncertain || (intent !== null && !mutation.isPending && receipt === null)
+
   const locked =
     mutation.isPending || lookup.isPending || unknown || receipt !== null
+
   return {
+    confirmPayment: () => {
+      if (!payment || locked) return
+      const saved: Intent = {
+        operation: 'MERCHANT_PAYMENT',
+        key: crypto.randomUUID(),
+        payload: { ...payment },
+      }
+      setIntent(saved)
+      mutation.mutate(saved)
+    },
     form,
     review,
     editReview: () => setReview(null),

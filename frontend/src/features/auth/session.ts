@@ -85,6 +85,15 @@ function refresh() {
 }
 
 export const auth = {
+  async revalidateProfile() {
+    const expected = generation
+    const user = await request<User>('/auth/me')
+    if (expected !== generation || state.user?.userId !== user.userId)
+      throw new ApiError('This session has changed.', 401, 'STALE_SESSION')
+    state = { ...state, user }
+    queryClient.setQueryData(['private', user.userId, 'me'], user)
+    emit()
+  },
   getState: () => state,
   subscribe: (listener: () => void) => {
     listeners.add(listener)

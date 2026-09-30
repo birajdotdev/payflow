@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   WalletCards,
   UserRound,
+  Store,
 } from 'lucide-react'
 
 import { Brand } from '@/components/brand'
@@ -36,6 +37,7 @@ const navigation = linkOptions([
   { to: '/wallet', label: 'My wallet', icon: WalletCards },
   { to: '/profile', label: 'Profile', icon: UserRound },
   { to: '/send', label: 'Send money', icon: ArrowUpRight },
+  { to: '/merchant', label: 'Merchant', icon: Store },
   {
     to: '/transactions',
     search: { page: 0, size: 20 },
