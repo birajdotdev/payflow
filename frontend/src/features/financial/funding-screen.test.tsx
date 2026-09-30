@@ -87,3 +87,43 @@ it('reconciles a restored intent without replaying the financial request', async
   expect(submit).not.toHaveBeenCalled()
   expect(sessionStorage.getItem('payflow-intent:alice:DEPOSIT')).toBeNull()
 })
+
+it('reviews validated transfer details, supports edits, and sends only after confirmation', async () => {
+  const submit = vi
+    .spyOn(operation, 'submitIntent')
+    .mockResolvedValue({ transactionId: 'receipt' })
+  const client = new QueryClient()
+  render(
+    <QueryClientProvider client={client}>
+      <FundingScreen transfer />
+    </QueryClientProvider>
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Review transfer' }))
+  expect(submit).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Confirm transfer' })).toBeNull()
+  const wallet = '11111111-1111-4111-8111-111111111111'
+  await userEvent.type(screen.getByLabelText('Amount (NPR)'), '10.25')
+  await userEvent.type(screen.getByLabelText('Recipient wallet number'), wallet)
+  await userEvent.type(screen.getByLabelText('Description (optional)'), 'Lunch')
+  await userEvent.click(screen.getByRole('button', { name: 'Review transfer' }))
+  const review = await screen.findByRole('region', { name: 'Transfer review' })
+  expect(review.textContent).toContain(wallet)
+  expect(review.textContent).toContain('FeeNPR 0.00')
+  expect(review.textContent).toContain('TotalNPR 10.25')
+  expect(submit).not.toHaveBeenCalled()
+  expect(sessionStorage.length).toBe(0)
+  await userEvent.click(screen.getByRole('button', { name: 'Edit transfer' }))
+  await userEvent.clear(screen.getByLabelText('Amount (NPR)'))
+  await userEvent.type(screen.getByLabelText('Amount (NPR)'), '12.50')
+  await userEvent.click(screen.getByRole('button', { name: 'Review transfer' }))
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Confirm transfer' })
+  )
+  await screen.findByText('Operation confirmed.')
+  expect(submit).toHaveBeenCalledTimes(1)
+  expect(submit.mock.calls[0][0].payload).toEqual({
+    amount: '12.50',
+    receiverWalletId: wallet,
+    description: 'Lunch',
+  })
+})

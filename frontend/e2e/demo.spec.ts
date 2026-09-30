@@ -77,7 +77,16 @@ test('two users fund, transfer, restore, safely retry and revoke logout', async 
       if (attempts.length === 1) await route.abort('failed')
       else await route.fulfill({ response })
     })
-    await alice.getByRole('button', { name: 'Send money', exact: true }).click()
+    await alice
+      .getByRole('button', { name: 'Review transfer', exact: true })
+      .click()
+    expect(attempts).toHaveLength(0)
+    await expect(
+      alice.getByRole('region', { name: 'Transfer review' })
+    ).toContainText(bobWallet)
+    await alice
+      .getByRole('button', { name: 'Confirm transfer', exact: true })
+      .click()
     await expect(
       alice.getByText('Outcome unknown', { exact: true })
     ).toBeVisible()
@@ -108,7 +117,12 @@ test('two users fund, transfer, restore, safely retry and revoke logout', async 
     await alice.goto('/send')
     await alice.getByLabel('Amount (NPR)').fill('1000')
     await alice.getByLabel('Recipient wallet number').fill(bobWallet)
-    await alice.getByRole('button', { name: 'Send money', exact: true }).click()
+    await alice
+      .getByRole('button', { name: 'Review transfer', exact: true })
+      .click()
+    await alice
+      .getByRole('button', { name: 'Confirm transfer', exact: true })
+      .click()
     await expect(alice.getByText(/Insufficient wallet balance/)).toBeVisible()
     await alice.goto('/wallet')
     await expect(alice.getByText('NPR 749.75', { exact: true })).toBeVisible()

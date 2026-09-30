@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import {
   createFileRoute,
   Outlet,
+  Navigate,
   redirect,
   useRouter,
 } from '@tanstack/react-router'
@@ -44,7 +45,17 @@ function ProtectedLayout() {
     },
   })
 
-  if (!session.user) return null
+  if (!session.user)
+    return (
+      <Navigate
+        to="/login"
+        search={{
+          redirect: safeReturn(router.state.location.href),
+          registered: false,
+        }}
+        replace
+      />
+    )
 
   return (
     <SidebarProvider>

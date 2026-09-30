@@ -37,6 +37,7 @@ describe('client contracts', () => {
     ])
       expect(safeReturn(destination)).toBe('/dashboard')
     expect(safeReturn('/wallet')).toBe('/wallet')
+    expect(safeReturn('/profile')).toBe('/profile')
   })
   it('formats decimal balances without floating point calculations', () => {
     expect(formatMoney('99999999999999999.99', 'NPR')).toBe(
