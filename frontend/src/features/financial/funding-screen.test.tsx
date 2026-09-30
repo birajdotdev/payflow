@@ -58,3 +58,32 @@ it('preserves an ambiguous request across navigation and explicitly retries the 
   expect(submit.mock.calls[1][0]).toEqual(original)
   expect(original.payload).toEqual({ amount: '10.25' })
 })
+
+it('reconciles a restored intent without replaying the financial request', async () => {
+  sessionStorage.setItem(
+    'payflow-intent:alice:DEPOSIT',
+    JSON.stringify({
+      operation: 'DEPOSIT',
+      key: 'committed-deposit',
+      payload: { amount: '10.25' },
+    })
+  )
+  const submit = vi.spyOn(operation, 'submitIntent')
+  vi.spyOn(operation, 'lookupIntent').mockResolvedValue({
+    state: 'FOUND',
+    transaction: {
+      transactionId: 'receipt',
+    } as NonNullable<operation.Outcome['transaction']>,
+  })
+  const client = new QueryClient()
+  render(
+    <QueryClientProvider client={client}>
+      <FundingScreen />
+    </QueryClientProvider>
+  )
+  await screen.findByText('Outcome unknown')
+  await userEvent.click(screen.getByRole('button', { name: 'Check outcome' }))
+  await screen.findByText('Operation confirmed.')
+  expect(submit).not.toHaveBeenCalled()
+  expect(sessionStorage.getItem('payflow-intent:alice:DEPOSIT')).toBeNull()
+})

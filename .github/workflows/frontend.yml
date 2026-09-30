@@ -19,7 +19,32 @@ jobs:
         with:
           node-version: "24"
           cache: true
-      - run: vp install
+      - run: vp install --frozen-lockfile
+      - run: vp run generate-routes
       - run: vp check
-      - run: vp test
+      - run: vp test run
       - run: vp build
+      - run: vp exec playwright install --with-deps chromium
+      - name: Start complete production-hosting stack
+        working-directory: .
+        run: |
+          export JWT_SECRET="$(openssl rand -base64 32)"
+          docker compose up --build -d
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/v3/api-docs > /dev/null && curl --fail --silent http://localhost:3000/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - run: vp run test:e2e
+      - name: Container diagnostics
+        if: failure()
+        working-directory: .
+        run: JWT_SECRET=diagnostics-only docker compose logs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: frontend/test-results

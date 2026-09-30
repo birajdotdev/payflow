@@ -13,9 +13,9 @@ bounded refresh retries. Monetary JSON values are parsed as decimal strings to
 preserve BigDecimal precision. Access tokens live only in memory. Private queries
 are scoped to the signed-in user and cleared on logout or session rejection.
 
-Implemented routes: `/`, `/register`, `/login`, `/dashboard`, and `/wallet`.
+Implemented routes: `/`, `/register`, `/login`, `/dashboard`, `/wallet`, `/send`, `/transactions`, and `/transactions/$transactionId`.
 The dashboard shows the real wallet balance and five recent transactions.
-Deposits, transfers, full history, and profile screens are later features.
+Funding, transfers, filtered history, and receipts use the backend API.
 
 ## Local development
 
@@ -101,7 +101,7 @@ For a real API smoke check: register a unique email/phone, sign in, verify the
 zero-balance dashboard, open `/wallet`, reload to verify restoration, log out,
 then reload `/wallet` and verify sign-in with no wallet data. Check both desktop
 and mobile viewports. This flow was verified against the local Spring Boot API;
-an automated production-hosting browser suite remains future work.
+the Playwright suite now runs this workflow against the Compose production host.
 
 ## Static build and hosting
 
@@ -113,8 +113,7 @@ vp preview
 
 Production hosting must serve `dist/`, provide SPA fallback to `index.html` for
 application routes, and proxy `/api/*` to Spring Boot. API requests and missing
-assets must not receive SPA HTML. The production static-server configuration and
-deep-link/API browser checks are still planned. `vp preview` is for local
+assets must not receive SPA HTML. The nginx container implements this policy and Playwright verifies it. `vp preview` is for local
 inspection; production uses a static web server.
 
 ## UI blocks and transaction table
@@ -122,3 +121,7 @@ inspection; production uses a static web server.
 Authentication uses the shadcn `login-03` and `signup-03` blocks with shared TanStack Form/Zod state. The authenticated shell, account menu, and summary cards are adapted from `dashboard-01` to use PayFlow data and typed TanStack Router links. They retain the project's Base UI/Nova theme. Demo charts, social sign-in, and unrelated sample navigation were removed.
 
 The shared transaction data table follows shadcn's TanStack Table v9 pattern. The backend owns ordering, filtering, and pagination; URL search parameters own the view, Query owns server data, and Table uses manual pagination with the server total. Receipt pages share status rendering without importing table machinery. Financial submission and reconciliation remain in `use-financial-operation.ts`, independent of layout.
+
+Run the real two-user browser demo with `vp exec playwright install chromium` and
+`vp run test:e2e` after starting the root Compose stack. See the root README for
+the full reproducible workflow. Playwright files are excluded from Vitest.

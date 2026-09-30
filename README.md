@@ -2,7 +2,7 @@
 
 PayFlow is a learning and portfolio project for a digital wallet using simulated
 NPR funds. The backend uses Java 21, Spring Boot 4.1, PostgreSQL, Spring Data JPA,
-Flyway, and Spring Security. The frontend is a React and TypeScript SPA scaffold
+Flyway, and Spring Security. The frontend is a React and TypeScript SPA
 using TanStack Router, Vite+, Tailwind CSS, and shadcn/ui.
 
 ## Current status
@@ -28,8 +28,7 @@ Implemented:
 - GitHub Actions builds, tests, and packages the backend.
 
 The frontend includes registration, login, protected dashboard/wallet views,
-real API queries, refresh-cookie session restoration, and logout. Deposits and
-transfers are implemented in the backend and await their frontend feature. The backend uses session-bound access JWTs and HttpOnly refresh cookies. Register through the API first,
+real API queries, funding, transfers, history, receipts, refresh-cookie session restoration, and logout. The backend uses session-bound access JWTs and HttpOnly refresh cookies. Register through the API first,
 then log in to receive an access token. API routes outside registration, login,
 refresh/logout, current user/wallet, deposits, transfers, transaction history/details, and API
 documentation are denied.
@@ -82,8 +81,7 @@ cd backend
 ```
 
 Compose reads `.env` automatically; Spring Boot does not. Exporting the variables
-above makes them available to the backend, which runs on port 8080. Compose currently
-starts only PostgreSQL. Flyway applies migrations at backend startup, and Hibernate
+above makes them available to the backend, which runs on port 8080. This command starts only PostgreSQL for host development; the full stack command is documented below. Flyway applies migrations at backend startup, and Hibernate
 validates the schema instead of modifying it.
 
 Database credentials in an existing PostgreSQL volume do not change when `.env`
@@ -499,8 +497,7 @@ vp test run
 vp build
 ```
 
-`vp check` runs formatting, lint, and TypeScript checks. The scaffold has no
-frontend tests yet; Vitest currently allows an empty suite. The build produces
+`vp check` runs formatting, lint, and TypeScript checks. Vitest covers authentication, API transport, tables, validation and financial recovery. The build produces
 static assets in `frontend/dist/`.
 
 ## Design and next milestones
@@ -515,13 +512,6 @@ collide after normalization, resolve those records before applying V2.
 
 The wallet has a nonnegative balance constraint and an optimistic version column.
 Deposits add pessimistic row locking as described above.
-
-Next milestones:
-
-1. React SPA workflows for registration, login, funding, transfers, and history,
-   with TanStack Query/Form, Zod, Axios, and session restoration as specified
-   in the PRD.
-2. Backend container and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
 
@@ -548,3 +538,48 @@ Treat the local cookie jar as a credential and remove it after use.
 The wallet page adds simulated NPR funds; `/send` transfers to a wallet UUID. `/transactions` supports bookmarked filters and pagination, and `/transactions/<id>` displays an owner/participant receipt. Successful mutations refresh wallet and activity queries.
 
 Each financial intent retains its exact decimal-string payload and idempotency key in a user-scoped query cache and tab session storage across navigation and reloads. Timeout, network, malformed-success, and server errors remain unknown; no mutation is automatically replayed. Check outcome calls `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER&key=...`. `FOUND` returns the committed receipt; `UNKNOWN` is not evidence of failure. An explicit retry submits the original payload and key, using the backend's existing serialized idempotency checks. Private intent state clears on logout/session loss. Restored intents remain unknown until checked or explicitly retried; restoration never submits a financial request.
+
+## Reproduce the MVP demonstration
+
+Docker Engine with Compose is sufficient to build and run all three services:
+
+```bash
+cp .env.example .env
+# Replace JWT_SECRET with output from: openssl rand -base64 32
+# Replace the demo database passwords with matching values.
+docker compose up --build -d
+```
+
+Open http://localhost:3000 and Swagger at http://localhost:8080/swagger-ui/index.html.
+Compose builds the Java 21 backend and Vite+ SPA, waits for PostgreSQL, and serves
+static assets through nginx. The local HTTP demo defaults to insecure cookies and
+trusts http://localhost:3000; deploy behind HTTPS with SESSION_COOKIE_SECURE=true
+and SESSION_TRUSTED_ORIGINS set to the exact public origin. Keep JWT_SECRET stable
+across restarts. PostgreSQL data survives `docker compose down`.
+
+Register Alice and Bob in separate browser profiles/private contexts. Copy Bob's
+wallet number, add NPR 1,000.00 to Alice, and send Bob NPR 250.25. Alice should have
+NPR 749.75 and Bob NPR 250.25. Review history and receipts, reload a nested route,
+and log out. An insufficient-funds transfer leaves both balances unchanged.
+
+Run the automated demo against the running Compose stack:
+
+```bash
+cd frontend
+vp install --frozen-lockfile
+vp exec playwright install chromium
+vp run test:e2e
+```
+
+The browser suite uses unique accounts and independent cookie contexts. It commits
+a transfer but drops its response, verifies no automatic replay on reload, then
+explicitly retries the exact key/payload and asserts one transfer and both balances.
+It also checks session restoration, receipt deep links, insufficient funds, logout,
+revoked access-token rejection, refresh rejection, static SPA fallback, JSON API
+forwarding, and missing-asset 404s. Traces are retained on failure. Override the
+browser target with PAYFLOW_BASE_URL when needed; its origin must also be trusted
+by the backend. CI runs this suite against the same container stack.
+
+If the default ports are occupied, set FRONTEND_PORT and BACKEND_PORT and update
+SESSION_TRUSTED_ORIGINS to the frontend origin; set PAYFLOW_BASE_URL to that same
+origin when running Playwright. The database host port remains 5432.
