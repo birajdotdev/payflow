@@ -80,7 +80,9 @@ export function ReceiptScreen({ transactionId }: { transactionId: string }) {
                   Type:
                     query.data.type === 'DEPOSIT'
                       ? 'Demo deposit'
-                      : 'Wallet transfer',
+                      : query.data.type === 'MERCHANT_PAYMENT'
+                        ? 'Merchant payment'
+                        : 'Wallet transfer',
                   Sender: query.data.senderWalletId ?? 'Demo funding',
                   Recipient: query.data.receiverWalletId,
                   Description: query.data.description ?? '—',
@@ -100,6 +102,20 @@ export function ReceiptScreen({ transactionId }: { transactionId: string }) {
                   </div>
                 ))}
               </dl>
+              {query.data.paymentRequestId && (
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      to="/payments/$paymentRequestId"
+                      params={{ paymentRequestId: query.data.paymentRequestId }}
+                    />
+                  }
+                >
+                  View merchant payment request
+                </Button>
+              )}
             </>
           )}
         </CardContent>

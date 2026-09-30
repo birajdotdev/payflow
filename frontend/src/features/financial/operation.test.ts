@@ -43,3 +43,19 @@ it('validates persisted intents before offering a same-key retry', () => {
       .success
   ).toBe(false)
 })
+
+it('requires a request UUID for a restored merchant intent', () => {
+  const intent = {
+    operation: 'MERCHANT_PAYMENT',
+    key: 'checkout',
+    payload: {
+      amount: '250.25',
+      paymentRequestId: '11111111-1111-4111-8111-111111111111',
+    },
+  }
+  expect(savedIntentSchema.parse(intent)).toEqual(intent)
+  expect(
+    savedIntentSchema.safeParse({ ...intent, payload: { amount: '250.25' } })
+      .success
+  ).toBe(false)
+})

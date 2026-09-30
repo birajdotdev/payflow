@@ -67,10 +67,11 @@ public class TransactionService {
 
     public com.payflow.backend.transaction.dto.OperationOutcome outcome(TransactionType operation, String key) {
         UUID walletId = currentWalletId();
-        if ((operation != TransactionType.DEPOSIT && operation != TransactionType.TRANSFER) || key == null
+        if ((operation != TransactionType.DEPOSIT && operation != TransactionType.TRANSFER
+                && operation != TransactionType.MERCHANT_PAYMENT) || key == null
                 || !key.matches("[A-Za-z0-9_-]{1,128}")) {
             throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
-                    "Use DEPOSIT or TRANSFER and a valid idempotency key.");
+                    "Use DEPOSIT, TRANSFER or MERCHANT_PAYMENT and a valid idempotency key.");
         }
         var result = operation == TransactionType.DEPOSIT
                 ? transactions.findByReceiverWalletIdAndTypeAndIdempotencyKey(walletId, operation, key)

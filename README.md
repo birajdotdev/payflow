@@ -513,7 +513,7 @@ collide after normalization, resolve those records before applying V2.
 The wallet has a nonnegative balance constraint and an optimistic version column.
 Deposits add pessimistic row locking as described above.
 
-Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
+Phase 2 merchant profiles, payment requests, customer payments, and receipts/dashboard are implemented. Refunds, admin tooling, and cloud deployment remain future milestones. See the [merchant acceptance scenario](docs/merchant-payments-acceptance.md).
 
 Authentication cookie examples (use HTTPS and the trusted frontend origin configured above):
 
@@ -537,7 +537,7 @@ Treat the local cookie jar as a credential and remove it after use.
 
 The wallet page adds simulated NPR funds; `/send` transfers to a wallet UUID. `/transactions` supports bookmarked filters and pagination, and `/transactions/<id>` displays an owner/participant receipt. Successful mutations refresh wallet and activity queries.
 
-Each financial intent retains its exact decimal-string payload and idempotency key in a user-scoped query cache and tab session storage across navigation and reloads. Timeout, network, malformed-success, and server errors remain unknown; no mutation is automatically replayed. Check outcome calls `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER&key=...`. `FOUND` returns the committed receipt; `UNKNOWN` is not evidence of failure. An explicit retry submits the original payload and key, using the backend's existing serialized idempotency checks. Private intent state clears on logout/session loss. Restored intents remain unknown until checked or explicitly retried; restoration never submits a financial request.
+Each financial intent retains its exact decimal-string payload and idempotency key in a user-scoped query cache and tab session storage across navigation and reloads. Timeout, network, malformed-success, and server errors remain unknown; no mutation is automatically replayed. Check outcome calls `GET /api/v1/transactions/outcome?operation=DEPOSIT|TRANSFER|MERCHANT_PAYMENT&key=...`. `FOUND` returns the committed receipt; `UNKNOWN` is not evidence of failure. An explicit retry submits the original payload and key, using the backend's existing serialized idempotency checks. Private intent state clears on logout/session loss. Restored intents remain unknown until checked or explicitly retried; restoration never submits a financial request.
 
 ## Reproduce the MVP demonstration
 
@@ -583,3 +583,16 @@ by the backend. CI runs this suite against the same container stack.
 If the default ports are occupied, set FRONTEND_PORT and BACKEND_PORT and update
 SESSION_TRUSTED_ORIGINS to the frontend origin; set PAYFLOW_BASE_URL to that same
 origin when running Playwright. The database host port remains 5432.
+
+
+### Merchant payments (Phase 2)
+
+Open `/merchant` on a customer account to create a demo merchant profile. The backend binds it to your existing wallet and assigns MERCHANT; sign-up itself still always creates a USER. Create a fixed-amount request (default lifetime 24 hours), copy its payment link, and open it in another customer's browser session. The customer reviews and explicitly confirms payment. The merchant dashboard shows the PAID request, incoming transaction, balance, and receipt; both participants can open the same transaction receipt. Dashboard data refreshes every 10 seconds and through Refresh dashboard.
+
+Merchant APIs consistently use the plural `/api/v1/merchants` namespace. Profile enrollment accepts business name, business contact email, and business phone; it cannot select an account, wallet, role, or balance. Only the merchant can list/cancel their requests or list incoming merchant payments. Shared payment-request reads expose a receipt ID only to the merchant and paying customer.
+
+Payment processing locks one payment request before locking both wallets in UUID order. Debit, credit, receipt insertion, and PAID status commit in a single Spring transaction. Same-payer/same-key retries return the immutable receipt; key reuse for another request conflicts. Different keys or customers competing for one request cannot settle it twice. PostgreSQL enforces unique payment-request settlement and payer-scoped MERCHANT_PAYMENT keys. Failed attempts roll back all state; expiry/cancellation, self-payment, frozen wallets, suspended merchants, insufficient funds, and balance limits cannot partially debit a wallet. Expiration is calculated from the deadline on reads and rechecked under the request lock, without a background worker.
+
+Payment recovery extends the existing saved-intent flow with MERCHANT_PAYMENT and the immutable request ID. No automatic mutation retry occurs after transport failure or reload. Explicit retries preserve the original key/request; outcome lookup scopes results to the paying wallet. Requests that have already been paid do not offer a new payment action.
+
+Run the [merchant acceptance scenario](docs/merchant-payments-acceptance.md) for exact balances, receipts, concurrency and rollback checks.

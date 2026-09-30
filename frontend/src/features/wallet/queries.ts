@@ -23,6 +23,7 @@ export type Transaction = {
   currency: string
   description: string | null
   createdAt: string
+  paymentRequestId?: string | null
 }
 
 export type TransactionPage = {

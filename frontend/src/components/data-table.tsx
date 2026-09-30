@@ -74,9 +74,13 @@ export function DataTable({
                 >
                   {row.original.type === 'DEPOSIT'
                     ? 'Demo funds added'
-                    : row.original.receiverWalletId === walletId
-                      ? 'Transfer received'
-                      : 'Transfer sent'}
+                    : row.original.type === 'MERCHANT_PAYMENT'
+                      ? row.original.receiverWalletId === walletId
+                        ? 'Merchant payment received'
+                        : 'Merchant payment sent'
+                      : row.original.receiverWalletId === walletId
+                        ? 'Transfer received'
+                        : 'Transfer sent'}
                 </Link>
                 <span
                   className="max-w-44 truncate font-mono text-xs text-muted-foreground"
