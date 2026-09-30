@@ -2,7 +2,8 @@
 
 PayFlow is a learning and portfolio project for a digital wallet using simulated
 NPR funds. The backend uses Java 21, Spring Boot 4.1, PostgreSQL, Spring Data JPA,
-Flyway, and Spring Security. The planned frontend is Next.js.
+Flyway, and Spring Security. The frontend is a React and TypeScript SPA scaffold
+using TanStack Router, Vite+, Tailwind CSS, and shadcn/ui.
 
 ## Current status
 
@@ -26,8 +27,12 @@ Implemented:
 - Integration tests run against disposable PostgreSQL containers.
 - GitHub Actions builds, tests, and packages the backend.
 
-The frontend is not implemented yet. Register first, then log in to receive an access token. Routes
-outside registration, login, current user/wallet, deposits, transfers, transaction history/details, and API documentation are denied.
+The frontend scaffold has a landing page; wallet workflows and API integration are
+not implemented yet. The backend currently uses access-token-only authentication;
+refresh sessions and logout are planned in the PRD. Register through the API first,
+then log in to receive an access token. API routes outside registration, login,
+current user/wallet, deposits, transfers, transaction history/details, and API
+documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
 
@@ -36,6 +41,7 @@ See the [PRD](docs/PRD.md) for the intended product scope.
 - Java 21
 - Docker with the Compose plugin, running and accessible to your user
 - Internet access on the first build to download Maven dependencies and container images
+- For the frontend: Node.js 24 and Vite+ (`vp`); the project pins pnpm 12.8.1
 
 The Maven wrapper is included; a separate Maven installation is unnecessary.
 
@@ -88,6 +94,20 @@ changes. Use the credentials with which that volume was initialized.
 
 Stop PostgreSQL with `docker compose stop` from the repository root; data stays in
 the named volume.
+
+### Frontend development
+
+In a separate terminal, from the repository root:
+
+```bash
+cd frontend
+vp install --frozen-lockfile
+vp run dev
+```
+
+Open <http://localhost:3000>. The scaffold currently has no API proxy or shared API
+client. See the [frontend README](frontend/README.md) for route generation, checks,
+tests, and static build/hosting requirements.
 
 ## Register an account
 
@@ -416,6 +436,20 @@ input, authentication/suspension, frozen-wallet reads, and financial record immu
 `verify` also packages an executable JAR in `backend/target/`. CI runs the same
 command on a Docker-enabled GitHub-hosted runner.
 
+Frontend CI runs the following sequence from `frontend/`:
+
+```bash
+vp install --frozen-lockfile
+vp run generate-routes
+vp check
+vp test run
+vp build
+```
+
+`vp check` runs formatting, lint, and TypeScript checks. The scaffold has no
+frontend tests yet; Vitest currently allows an empty suite. The build produces
+static assets in `frontend/dist/`.
+
 ## Design and next milestones
 
 The backend is a modular monolith organized by feature. Controllers validate HTTP
@@ -431,7 +465,9 @@ Deposits add pessimistic row locking as described above.
 
 Next milestones:
 
-1. Minimal Next.js workflow for registration, login, funding, transfers, and history.
+1. React SPA workflows for registration, login, funding, transfers, and history,
+   with TanStack Query/Form, Zod, Axios, and backend refresh sessions as specified
+   in the PRD.
 2. Backend container and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
