@@ -5,6 +5,7 @@ export const emailSchema = z
   .trim()
   .email('Enter a valid email address.')
   .max(255)
+
 export const passwordSchema = z
   .string()
   .refine(
@@ -15,10 +16,12 @@ export const passwordSchema = z
     (value) => new TextEncoder().encode(value).length <= 72,
     'Password must be 72 UTF-8 bytes or fewer.'
   )
+
 export const loginSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
 })
+
 export const registerSchema = loginSchema.extend({
   fullName: z.string().trim().min(1, 'Enter your full name.').max(100),
   phone: z
@@ -29,8 +32,11 @@ export const registerSchema = loginSchema.extend({
       'Use an international phone number, such as +9779800000000.'
     ),
 })
+
 export type LoginInput = z.infer<typeof loginSchema>
+
 export type RegisterInput = z.infer<typeof registerSchema>
+
 export type User = {
   userId: string
   fullName: string
@@ -39,6 +45,7 @@ export type User = {
   role: 'USER' | 'MERCHANT' | 'ADMIN'
   status: 'ACTIVE' | 'SUSPENDED'
 }
+
 export type LoginResponse = {
   accessToken: string
   tokenType: string
@@ -46,6 +53,7 @@ export type LoginResponse = {
   expiresAt: string
   user: User
 }
+
 export type RegisterResponse = Omit<User, 'status'> & { walletId: string }
 
 export function safeReturn(value: unknown): '/dashboard' | '/wallet' {

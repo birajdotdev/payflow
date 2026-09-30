@@ -16,6 +16,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
 })
+
 function mount(mode: 'register' | 'login') {
   render(
     <QueryClientProvider

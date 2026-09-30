@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/card'
 
 export const Route = createFileRoute('/')({ component: Home })
+
 function Home() {
   return (
     <div className="min-h-svh bg-background">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 p-6">
         <Brand />
+
         <Button
           variant="outline"
           render={
@@ -29,19 +31,23 @@ function Home() {
           Sign in
         </Button>
       </header>
+
       <main className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-16 sm:py-24">
         <section className="flex max-w-3xl flex-col items-start gap-6">
           <p className="text-sm font-medium text-primary">
             MONEY, WITH ROOM TO BREATHE
           </p>
+
           <h1 className="text-5xl font-semibold tracking-tight sm:text-7xl">
             Your wallet.
             <br />A clearer picture.
           </h1>
+
           <p className="max-w-xl text-lg text-muted-foreground">
             Meet PayFlow. A simple home for your balance and activity, built to
             make every step easy to follow.
           </p>
+
           <Button
             size="lg"
             render={<Link to="/register" search={{ redirect: '/dashboard' }} />}
@@ -49,10 +55,12 @@ function Home() {
             Create your wallet
             <ArrowRight data-icon="inline-end" />
           </Button>
+
           <p className="text-xs text-muted-foreground">
             A demo experience with simulated NPR funds.
           </p>
         </section>
+
         <section className="grid gap-4 md:grid-cols-3">
           {[
             {
@@ -76,8 +84,10 @@ function Home() {
             <Card key={item.title}>
               <CardHeader>
                 <item.icon className="mb-3 size-6 text-primary" />
+
                 <CardTitle>{item.title}</CardTitle>
               </CardHeader>
+
               <CardContent>
                 <CardDescription>{item.description}</CardDescription>
               </CardContent>

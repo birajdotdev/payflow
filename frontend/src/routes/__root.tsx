@@ -31,12 +31,15 @@ export const Route = createRootRouteWithContext<{
     </main>
   ),
 })
+
 function RootComponent() {
   const session = useSession()
   const router = useRouter()
+
   useEffect(() => {
     void router.invalidate()
   }, [session.status, router])
+
   return (
     <ThemeProvider>
       <Outlet />
@@ -46,6 +49,7 @@ function RootComponent() {
 
 function RouteError({ error, reset }: ErrorComponentProps) {
   const router = useRouter()
+
   return (
     <main className="mx-auto max-w-lg p-8">
       <ErrorNotice

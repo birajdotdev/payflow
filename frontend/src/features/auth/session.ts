@@ -16,41 +16,52 @@ type State = {
   user: User | null
   logoutUnconfirmed: boolean
 }
+
 let state: State = { status: 'unknown', user: null, logoutUnconfirmed: false }
 let token: string | null = null
 let generation = 0
 let refreshPromise: Promise<void> | undefined
 let startupPromise: Promise<void> | undefined
 const listeners = new Set<() => void>()
+
 function emit() {
   for (const listener of listeners) listener()
 }
+
 function clear(logoutUnconfirmed = false) {
   generation++
   token = null
   state = { status: 'anonymous', user: null, logoutUnconfirmed }
+
   void queryClient.cancelQueries()
   queryClient.clear()
+
   emit()
 }
+
 function accept(response: LoginResponse, expected: number) {
   if (expected !== generation)
     throw new ApiError('This session has changed.', 401, 'STALE_SESSION')
+
   token = response.accessToken
   state = {
     status: 'authenticated',
     user: response.user,
     logoutUnconfirmed: false,
   }
+
   queryClient.setQueryData(
     ['private', response.user.userId, 'me'],
     response.user
   )
+
   emit()
 }
+
 function refresh() {
   if (!refreshPromise) {
     const expected = generation
+
     refreshPromise = request<LoginResponse>('/auth/refresh', { method: 'POST' })
       .then((response) => accept(response, expected))
       .catch((error) => {
@@ -66,6 +77,7 @@ function refresh() {
         refreshPromise = undefined
       })
   }
+
   return refreshPromise
 }
 
@@ -73,12 +85,14 @@ export const auth = {
   getState: () => state,
   subscribe: (listener: () => void) => {
     listeners.add(listener)
+
     return () => {
       listeners.delete(listener)
     }
   },
   async restore() {
     if (state.status !== 'unknown') return
+
     if (!startupPromise) {
       startupPromise = refresh()
         .catch((error) => {
@@ -88,15 +102,18 @@ export const auth = {
           startupPromise = undefined
         })
     }
+
     return startupPromise
   },
   async login(input: LoginInput) {
     clear()
+
     const expected = generation
     const response = await request<LoginResponse>('/auth/login', {
       method: 'POST',
       data: input,
     })
+
     accept(response, expected)
   },
   register: (input: RegisterInput) =>
@@ -106,7 +123,9 @@ export const auth = {
     }),
   async logout() {
     clear(true)
+
     const expected = generation
+
     await request<null>('/auth/logout', { method: 'POST' })
     if (expected === generation) {
       state = { ...state, logoutUnconfirmed: false }
@@ -114,12 +133,14 @@ export const auth = {
     }
   },
 }
+
 connectSession({
   token: () => token,
   generation: () => generation,
   refresh,
   invalidate: () => clear(),
 })
+
 export function useSession() {
   return useSyncExternalStore(auth.subscribe, auth.getState)
 }

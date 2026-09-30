@@ -17,6 +17,7 @@ const login = {
   expiresAt: '2026-10-01',
   tokenType: 'Bearer',
 }
+
 function success(config: InternalAxiosRequestConfig, data: unknown) {
   return {
     config,
@@ -26,6 +27,7 @@ function success(config: InternalAxiosRequestConfig, data: unknown) {
     headers: new AxiosHeaders(),
   }
 }
+
 function reject(config: InternalAxiosRequestConfig, status = 401) {
   return new AxiosError('API error', 'ERR_BAD_RESPONSE', config, undefined, {
     config,
@@ -47,6 +49,7 @@ async function setup() {
   const { api, request, ApiError } = await import('./api')
   const { auth } = await import('@/features/auth/session')
   const { queryClient } = await import('./query-client')
+
   return { api, request, ApiError, auth, queryClient }
 }
 describe('shared API and sessions', () => {
@@ -97,11 +100,13 @@ describe('shared API and sessions', () => {
         return Promise.resolve(success(config, login))
       if (config.url === '/auth/refresh') {
         refreshes++
+
         return Promise.resolve(
           success(config, { ...login, accessToken: 'renewed' })
         )
       }
       reads++
+
       return Promise.reject(reject(config))
     }
     await auth.login({ email: user.email, password: 'password123' })
@@ -124,6 +129,7 @@ describe('shared API and sessions', () => {
     const seen: Array<InternalAxiosRequestConfig> = []
     api.defaults.adapter = (config) => {
       seen.push(config)
+
       return Promise.resolve(
         success(config, config.url === '/auth/login' ? login : {})
       )
@@ -170,11 +176,13 @@ describe('shared API and sessions', () => {
       if (config.url === '/auth/refresh') {
         refreshes++
         await new Promise((resolve) => setTimeout(resolve, 10))
+
         return success(config, { ...login, accessToken: 'renewed-token' })
       }
       reads++
       if (config.headers.get('Authorization') === 'Bearer first-token')
         throw reject(config)
+
       return success(config, { balance: 0 })
     }
     await auth.login({ email: user.email, password: 'password123' })
@@ -189,6 +197,7 @@ describe('shared API and sessions', () => {
       if (config.url === '/auth/login')
         return Promise.resolve(success(config, login))
       if (config.url === '/auth/refresh') refreshes++
+
       return Promise.reject(reject(config))
     }
     await auth.login({ email: user.email, password: 'password123' })
@@ -232,6 +241,7 @@ describe('shared API and sessions', () => {
         await new Promise<void>((resolve) => {
           release = resolve
         })
+
         return success(config, login)
       }
       if (config.url === '/auth/logout')

@@ -12,6 +12,7 @@ export class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
+
   get unknownOutcome() {
     return this.status === undefined
   }
@@ -19,8 +20,10 @@ export class ApiError extends Error {
 
 export function normalizeError(error: unknown): ApiError {
   if (error instanceof ApiError) return error
+
   if (axios.isAxiosError(error)) {
     const body = error.response?.data
+
     return new ApiError(
       body?.message ??
         (error.response
@@ -31,6 +34,7 @@ export function normalizeError(error: unknown): ApiError {
       body?.errors ?? body?.details
     )
   }
+
   return new ApiError('Something went wrong. Please try again.')
 }
 
@@ -40,7 +44,9 @@ type SessionTransport = {
   refresh: () => Promise<unknown>
   invalidate: () => void
 }
+
 let session: SessionTransport | undefined
+
 export function connectSession(transport: SessionTransport) {
   session = transport
 }
@@ -49,7 +55,9 @@ type RequestConfig = InternalAxiosRequestConfig & {
   retried?: boolean
   generation?: number
 }
+
 const publicAuth = /^\/auth\/(register|login|refresh|logout)$/
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 15_000,
@@ -57,6 +65,7 @@ export const api = axios.create({
   transformResponse: [
     (data: unknown) => {
       if (typeof data !== 'string' || !data.length) return data
+
       try {
         return parse(data, (key, value) =>
           isLosslessNumber(value)
@@ -72,6 +81,7 @@ export const api = axios.create({
     },
   ],
 })
+
 api.interceptors.request.use((config: RequestConfig) => {
   if (
     !config.url?.startsWith('/') ||
@@ -85,30 +95,38 @@ api.interceptors.request.use((config: RequestConfig) => {
       'INVALID_API_ORIGIN'
     )
   }
+
   config.generation ??= session?.generation()
   config.headers.delete('Authorization')
+
   if (publicAuth.test(config.url ?? '')) {
     config.withCredentials = true
     config.headers.set('X-PayFlow-CSRF', '1')
   } else if (session?.token()) {
     config.headers.set('Authorization', `Bearer ${session.token()}`)
   }
+
   return config
 })
+
 api.interceptors.response.use(
   (response) => {
     const config = response.config as RequestConfig
+
     if (
       !publicAuth.test(config.url ?? '') &&
       config.generation !== session?.generation()
     ) {
       throw new ApiError('This session has changed.', 401, 'STALE_SESSION')
     }
+
     return response
   },
   async (error: unknown) => {
     if (!axios.isAxiosError(error)) throw normalizeError(error)
+
     const config = error.config as RequestConfig | undefined
+
     if (
       config &&
       !publicAuth.test(config.url ?? '') &&
@@ -124,12 +142,16 @@ api.interceptors.response.use(
         ) {
           await session.refresh()
         }
+
         if (config.generation !== session.generation())
           throw new ApiError('This session has changed.', 401, 'STALE_SESSION')
+
         return api.request(config)
       }
+
       session.invalidate()
     }
+
     throw normalizeError(error)
   }
 )
@@ -144,6 +166,7 @@ export async function request<T>(
     ...config,
     url: path,
   })
+
   if (
     typeof response.data !== 'object' ||
     response.data === null ||
@@ -156,5 +179,6 @@ export async function request<T>(
       'INVALID_RESPONSE'
     )
   }
+
   return response.data.data
 }

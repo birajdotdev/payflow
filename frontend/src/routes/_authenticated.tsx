@@ -17,19 +17,24 @@ import { auth, useSession } from '@/features/auth/session'
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ context, location }) => {
     await context.auth.restore()
+
     const user = context.auth.getState().user
+
     if (!user)
       throw redirect({
         to: '/login',
         search: { redirect: safeReturn(location.pathname), registered: false },
       })
+
     return { user }
   },
   component: ProtectedLayout,
 })
+
 function ProtectedLayout() {
   const session = useSession()
   const router = useRouter()
+
   const logout = useMutation({
     mutationFn: () => auth.logout(),
     onSettled: async () => {
@@ -40,16 +45,20 @@ function ProtectedLayout() {
       })
     },
   })
+
   if (!session.user) return null
+
   return (
     <div className="min-h-svh bg-muted/30">
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
           <Brand />
+
           <div className="flex items-center gap-4">
             <span className="hidden text-sm text-muted-foreground sm:block">
               {session.user.fullName}
             </span>
+
             <Button
               variant="outline"
               disabled={logout.isPending}
@@ -61,6 +70,7 @@ function ProtectedLayout() {
           </div>
         </div>
       </header>
+
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 md:grid-cols-[180px_1fr]">
         <aside className="flex flex-col gap-5">
           <nav aria-label="Main navigation" className="flex gap-2 md:flex-col">
@@ -80,6 +90,7 @@ function ProtectedLayout() {
               <LayoutDashboard data-icon="inline-start" />
               Overview
             </Button>
+
             <Button
               variant="ghost"
               className="justify-start"
@@ -97,13 +108,16 @@ function ProtectedLayout() {
               My wallet
             </Button>
           </nav>
+
           <Separator />
+
           <p className="hidden text-xs leading-relaxed text-muted-foreground md:block">
             Demo mode
             <br />
             All balances are simulated NPR funds.
           </p>
         </aside>
+
         <main className="min-w-0">
           <Outlet />
         </main>

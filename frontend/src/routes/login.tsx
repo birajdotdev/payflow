@@ -10,12 +10,15 @@ export const Route = createFileRoute('/login')({
   }),
   beforeLoad: async ({ context, search }) => {
     await context.auth.restore()
+
     if (context.auth.getState().status === 'authenticated')
       throw redirect({ to: search.redirect })
   },
   component: Login,
 })
+
 function Login() {
   const search = Route.useSearch()
+
   return <AuthScreen mode="login" {...search} />
 }
