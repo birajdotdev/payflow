@@ -5,7 +5,17 @@ export function TransactionStatus({ status }: { status: string }) {
   const Icon =
     status === 'SUCCESS' ? CheckCircle2 : status === 'FAILED' ? XCircle : Clock3
   return (
-    <Badge variant={status === 'FAILED' ? 'destructive' : 'outline'}>
+    <Badge
+      variant={
+        status === 'FAILED'
+          ? 'destructive'
+          : status === 'SUCCESS'
+            ? 'success'
+            : status === 'REFUNDED'
+              ? 'warning'
+              : 'outline'
+      }
+    >
       <Icon />
       {status === 'SUCCESS'
         ? 'Completed'

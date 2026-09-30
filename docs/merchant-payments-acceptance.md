@@ -117,5 +117,24 @@ All endpoints return the existing PayFlow envelope. Reads require authentication
 | `GET /api/v1/transactions/outcome?operation=MERCHANT_PAYMENT&key=...` | Payer-scoped FOUND receipt or UNKNOWN; UNKNOWN does not mean failure |
 
 Expired status is derived from the deadline for pending requests and rechecked
-under the request lock. No background expiration job is required. Refunds and the
-other Phase 2 features remain separate work.
+under the request lock. No background expiration job is required. Other Phase 2 features remain separate work.
+
+## Full merchant refund
+
+1. Complete the NPR 250.25 payment above, with customer NPR 749.75 and merchant NPR 250.25.
+2. In **Incoming payments**, open the payment receipt and choose **Refund payment**. The accessible **Confirm full refund** dialog shows NPR 250.25, the original customer wallet, and payment reference. Cancel produces no request. Choose **Confirm refund** to submit.
+3. The merchant has NPR 0.00 and the customer NPR 1,000.00. The original receipt remains SUCCESS with derived **Refunded** status and **View refund receipt**. The separate refund receipt identifies **Merchant payment refund**, reversed sender/recipient, and **View original payment**. Both participants can access both records; unrelated accounts cannot.
+4. The merchant dashboard keeps the incoming payment and marks it **Refunded**. Customer history contains one **Refund received**; merchant history contains one **Refund sent**.
+5. A repeated original key returns the same refund. Concurrent same-key attempts return the same receipt; concurrent different keys produce one success and one conflict. Wallet versions increment once for each refund debit/credit. The request remains PAID and cannot be paid again.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /api/v1/merchants/payments/{transactionId}/refund` | Receiving merchant only, required Idempotency-Key, no body; full original amount/customer |
+| `GET /api/v1/transactions/outcome?operation=REFUND&key=...` | Initiating merchant-scoped FOUND refund receipt or UNKNOWN |
+
+The PostgreSQL integration suite covers exact balance restoration, original-row preservation, same/different-key concurrency, authorization, invalid keys/bodies, ineligible transactions, key conflicts, insufficient funds, frozen participant wallets, suspended accounts/profiles, recipient balance limits, and injected failure after wallet flush. The injected failure rolls back balances, versions, timestamps, and receipt/key; retrying the original key succeeds once.
+
+The browser acceptance also commits a refund and drops its response, reloads the original payment receipt without a second POST, explicitly retries the same key/body, and checks restored balances, refund history, dashboard status, both linked receipts, and customer absence of refund controls. Session storage retains the original key until recovery completes. UNKNOWN is not failure, and no refund is automatically replayed.
+
+
+Validation recorded on 2026-09-30: backend formatting and `./mvnw verify` passed 181 tests, including 38 merchant payment/refund cases; frontend format/lint/type checks, 42 unit tests, and production build passed. All 7 browser tests passed on the source-rebuilt Compose stack at `http://localhost:13000`. Interactive T3 preview also verified confirmation details and both linked receipts.

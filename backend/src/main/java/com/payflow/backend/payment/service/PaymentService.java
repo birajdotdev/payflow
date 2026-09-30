@@ -17,6 +17,7 @@ import com.payflow.backend.transaction.repository.TransactionRepository;
 import com.payflow.backend.user.entity.*;
 import com.payflow.backend.wallet.entity.Wallet;
 import com.payflow.backend.wallet.repository.WalletRepository;
+import com.payflow.backend.wallet.service.DepositService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -45,8 +46,7 @@ public class PaymentService {
         var expiry = input.expiresAt() == null ? Instant.now().plus(24, ChronoUnit.HOURS) : input.expiresAt();
 
         if (input.amount() == null || input.amount().signum() <= 0 || input.amount().scale() > 2
-                || input.amount().compareTo(com.payflow.backend.wallet.service.DepositService.MAX_BALANCE) > 0
-                || !expiry.isAfter(Instant.now()))
+                || input.amount().compareTo(DepositService.MAX_BALANCE) > 0 || !expiry.isAfter(Instant.now()))
             throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid amount or expiration.");
 
         return PaymentRequestResponse.from(
@@ -156,6 +156,66 @@ public class PaymentService {
         requests.flush();
 
         return TransactionResponse.from(t);
+    }
+
+    @Transactional
+    public TransactionResponse refund(UUID id, String key) {
+        var merchant = merchants.requireOwned();
+
+        if (key == null || !key.matches("[A-Za-z0-9_-]{1,128}"))
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                    "A valid Idempotency-Key is required.");
+
+        var original = transactions.findById(id)
+            .orElseThrow(
+                    () -> new FinancialException(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", "Payment not found."));
+
+        if (!merchant.getWalletId().equals(original.getReceiverWalletId()))
+            throw new FinancialException(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", "Payment not found.");
+
+        if (original.getType() != TransactionType.MERCHANT_PAYMENT || original.getStatus() != TransactionStatus.SUCCESS)
+            throw new FinancialException(HttpStatus.CONFLICT, "REFUND_INELIGIBLE",
+                    "Only successful merchant payments can be refunded.");
+
+        // Original payment fields are immutable. All competing refunds serialize
+        // through the same participant wallets; no request/transaction lock is
+        // acquired after a wallet, avoiding lock-order cycles with payments.
+        UUID senderId = merchant.getWalletId();
+        UUID receiverId = original.getSenderWalletId();
+
+        boolean senderFirst = senderId.compareTo(receiverId) < 0;
+        var first = lock(senderFirst ? senderId : receiverId);
+        var second = lock(senderFirst ? receiverId : senderId);
+
+        var sender = senderFirst ? first : second;
+        var receiver = senderFirst ? second : first;
+
+        var previous = transactions.findBySenderWalletIdAndTypeAndIdempotencyKey(senderId, TransactionType.REFUND, key);
+
+        if (previous.isPresent()) {
+            if (!id.equals(previous.get().getOriginalPaymentId()))
+                throw new FinancialException(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT",
+                        "This key belongs to another refund.");
+
+            return TransactionResponse.from(previous.get());
+        }
+
+        if (transactions.findByOriginalPaymentId(id).isPresent())
+            throw new FinancialException(HttpStatus.CONFLICT, "PAYMENT_ALREADY_REFUNDED",
+                    "Payment has already been refunded.");
+
+        active(merchant);
+
+        if (sender.getUser().getStatus() != UserStatus.ACTIVE || receiver.getUser().getStatus() != UserStatus.ACTIVE
+                || sender.getUser().getRole() != UserRole.MERCHANT
+                || (receiver.getUser().getRole() != UserRole.USER && receiver.getUser().getRole() != UserRole.MERCHANT))
+            throw new FinancialException(HttpStatus.CONFLICT, "ACCOUNT_UNAVAILABLE",
+                    "A payment participant is unavailable.");
+
+        sender.transferTo(receiver, original.getAmount());
+        wallets.flush();
+
+        return TransactionResponse.from(transactions.saveAndFlush(FinancialTransaction.refund(original, key)));
     }
 
     private Wallet lock(UUID id) {

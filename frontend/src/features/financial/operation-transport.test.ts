@@ -73,3 +73,32 @@ it('keeps malformed receipts and reconciliation responses ambiguous', async () =
     })
   }
 })
+
+it('submits a refund with only original payment identity and key, never amount or recipient', async () => {
+  const refund: Intent = {
+    operation: 'REFUND',
+    key: 'refund-original',
+    payload: {
+      amount: '250.25',
+      originalPaymentId: intent.payload.paymentRequestId,
+    },
+  }
+  api.defaults.adapter = async (config) => {
+    expect(config.url).toBe(
+      `/merchants/payments/${refund.payload.originalPaymentId}/refund`
+    )
+    expect(config.headers.get('Idempotency-Key')).toBe(refund.key)
+    expect(config.data).toBeUndefined()
+    return {
+      config,
+      status: 200,
+      statusText: 'OK',
+      headers: new AxiosHeaders(),
+      data: {
+        success: true,
+        data: { transactionId: '22222222-2222-4222-8222-222222222222' },
+      },
+    }
+  }
+  await submitIntent(refund)
+})

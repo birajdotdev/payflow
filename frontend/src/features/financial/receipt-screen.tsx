@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { WalletId } from '@/components/wallet-id'
 import { useSession } from '@/features/auth/session'
+import { RefundAction } from '@/features/merchant/refund-action'
 import { formatMoney } from '@/features/wallet/queries'
 import type { Transaction } from '@/features/wallet/queries'
 import { request } from '@/lib/api'
@@ -84,18 +85,26 @@ export function ReceiptContent({ transactionId }: { transactionId: string }) {
             <p className="text-3xl font-semibold tabular-nums">
               {formatMoney(query.data.amount, query.data.currency)}
             </p>
-            <TransactionStatus status={query.data.status} />
+            <TransactionStatus
+              status={
+                query.data.refundStatus === 'REFUNDED'
+                  ? 'REFUNDED'
+                  : query.data.status
+              }
+            />
           </div>
           <Separator />
           <dl className="grid gap-5 sm:grid-cols-2">
             {Object.entries({
               Reference: query.data.reference,
               Type:
-                query.data.type === 'DEPOSIT'
-                  ? 'Demo deposit'
-                  : query.data.type === 'MERCHANT_PAYMENT'
-                    ? 'Merchant payment'
-                    : 'Wallet transfer',
+                query.data.type === 'REFUND'
+                  ? 'Merchant payment refund'
+                  : query.data.type === 'DEPOSIT'
+                    ? 'Demo deposit'
+                    : query.data.type === 'MERCHANT_PAYMENT'
+                      ? 'Merchant payment'
+                      : 'Wallet transfer',
               Sender: query.data.senderWalletId ?? 'Demo funding',
               Recipient: query.data.receiverWalletId,
               Description: query.data.description ?? '—',
@@ -115,6 +124,36 @@ export function ReceiptContent({ transactionId }: { transactionId: string }) {
               </div>
             ))}
           </dl>
+          {query.data.originalPaymentId && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/transactions/$transactionId"
+                  params={{ transactionId: query.data.originalPaymentId }}
+                />
+              }
+            >
+              View original payment
+            </Button>
+          )}
+          {query.data.refundTransactionId && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/transactions/$transactionId"
+                  params={{ transactionId: query.data.refundTransactionId }}
+                />
+              }
+            >
+              View refund receipt
+            </Button>
+          )}
+          {query.data.type === 'MERCHANT_PAYMENT' &&
+            user.role === 'MERCHANT' && <RefundAction payment={query.data} />}
           {query.data.paymentRequestId && (
             <Button
               variant="outline"

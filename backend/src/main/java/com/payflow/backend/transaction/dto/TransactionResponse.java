@@ -13,11 +13,14 @@ import com.payflow.backend.transaction.entity.TransactionType;
  */
 public record TransactionResponse(UUID transactionId, String reference, TransactionType type, TransactionStatus status,
         UUID senderWalletId, UUID receiverWalletId, BigDecimal amount, String currency, String description,
-        Instant createdAt, UUID paymentRequestId) {
+        Instant createdAt, UUID paymentRequestId, UUID originalPaymentId, UUID refundTransactionId,
+        String refundStatus) {
     public static TransactionResponse from(FinancialTransaction transaction) {
         return new TransactionResponse(transaction.getId(), transaction.getReference(), transaction.getType(),
                 transaction.getStatus(), transaction.getSenderWalletId(), transaction.getReceiverWalletId(),
                 transaction.getAmount(), transaction.getCurrency(), transaction.getDescription(),
-                transaction.getCreatedAt(), transaction.getPaymentRequestId());
+                transaction.getCreatedAt(), transaction.getPaymentRequestId(), transaction.getOriginalPaymentId(),
+                transaction.getRefundTransactionId(), transaction.getType() == TransactionType.MERCHANT_PAYMENT
+                        ? (transaction.getRefundTransactionId() == null ? "NOT_REFUNDED" : "REFUNDED") : null);
     }
 }

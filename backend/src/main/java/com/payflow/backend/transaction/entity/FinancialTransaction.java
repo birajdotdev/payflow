@@ -3,12 +3,14 @@ package com.payflow.backend.transaction.entity;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Formula;
 
 @Entity
 @Table(name = "transactions")
@@ -38,6 +40,13 @@ public class FinancialTransaction {
 
     @Column(name = "payment_request_id", updatable = false)
     private UUID paymentRequestId;
+
+    @Column(name = "original_payment_id", updatable = false)
+    private UUID originalPaymentId;
+
+    // Derived from the unique reversal link; the original payment stays immutable.
+    @Formula("(select r.id from transactions r where r.original_payment_id = id)")
+    private UUID refundTransactionId;
 
     @Column(nullable = false, precision = 19, scale = 2, updatable = false)
     private BigDecimal amount;
@@ -77,12 +86,20 @@ public class FinancialTransaction {
         return transaction;
     }
 
+    public static FinancialTransaction refund(FinancialTransaction original, String key) {
+        var t = transfer(original.receiverWalletId, original.senderWalletId, original.amount,
+                "Full merchant payment refund", key);
+        t.type = TransactionType.REFUND;
+        t.originalPaymentId = original.id;
+        return t;
+    }
+
     public static FinancialTransaction deposit(UUID walletId, BigDecimal amount, String key, BigDecimal balanceAfter) {
         var transaction = new FinancialTransaction();
         transaction.id = UUID.randomUUID();
         // PostgreSQL timestamps retain microseconds; keep the initial and replayed
         // receipt identical.
-        transaction.createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        transaction.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         transaction.updatedAt = transaction.createdAt;
         transaction.reference = "PF-" + transaction.createdAt.atOffset(ZoneOffset.UTC).getYear() + "-" + transaction.id;
         transaction.type = TransactionType.DEPOSIT;
