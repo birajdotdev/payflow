@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { Plus, Store, RefreshCw, Link2, ArrowDownLeft } from 'lucide-react'
 import { useState } from 'react'
 import { z } from 'zod'
 
@@ -16,7 +17,17 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
   Empty,
+  EmptyContent,
+  EmptyMedia,
   EmptyHeader,
   EmptyTitle,
   EmptyDescription,
@@ -29,20 +40,15 @@ import {
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toast } from '@/components/ui/toast'
 import { auth, useSession } from '@/features/auth/session'
 import { amountSchema } from '@/features/financial/operation'
 import { formatMoney, walletQuery } from '@/features/wallet/queries'
 import type { TransactionPage } from '@/features/wallet/queries'
 import { request } from '@/lib/api'
 
+import { PaymentRequestsTable } from './payment-requests-table'
 import { merchantQuery } from './queries'
 import type { Merchant, PaymentRequest, PaymentRequestPage } from './queries'
 
@@ -94,12 +100,13 @@ function RefreshRole() {
       <Button disabled={refresh.isPending} onClick={() => refresh.mutate()}>
         Refresh account
       </Button>
-      {refresh.error && <ErrorNotice error={refresh.error} />}
+      {refresh.error && <ErrorNotice inline error={refresh.error} />}
     </div>
   )
 }
 
 function Enrollment() {
+  const [open, setOpen] = useState(false)
   const user = useSession().user!
 
   const client = useQueryClient()
@@ -114,6 +121,11 @@ function Enrollment() {
     onSuccess: async (merchant) => {
       await auth.revalidateProfile()
       client.setQueryData(merchantQuery(user.userId).queryKey, merchant)
+      toast.add({
+        title: 'Your merchant profile is ready',
+        description: 'Create a payment link to receive your first payment.',
+        type: 'success',
+      })
     },
   })
 
@@ -143,29 +155,62 @@ function Enrollment() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Create your merchant profile
-      </h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>Your business</CardTitle>
-          <CardDescription>
-            Receive simulated NPR in your existing wallet. Creating this profile
-            makes your account a merchant. Business contacts are visible to
-            signed-in customers.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <form
-            noValidate
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (!enroll.isPending) void form.handleSubmit()
-            }}
-          >
-            <FieldGroup>
-              {(['businessName', 'contactEmail', 'contactNumber'] as const).map(
-                (name) => (
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Merchant</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A home for your business payments.
+        </p>
+      </div>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!enroll.isPending) setOpen(next)
+        }}
+      >
+        <Empty className="min-h-96 border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Store />
+            </EmptyMedia>
+            <EmptyTitle>Start accepting payments</EmptyTitle>
+            <EmptyDescription>
+              Create a business profile, share a payment link, and receive
+              simulated NPR into your existing wallet.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <DialogTrigger render={<Button />} disabled={user.role === 'ADMIN'}>
+              <Plus data-icon="inline-start" />
+              Set up merchant profile
+            </DialogTrigger>
+            <p className="text-xs text-muted-foreground">
+              Your business contacts will be visible to signed-in customers.
+            </p>
+          </EmptyContent>
+        </Empty>
+        <DialogContent
+          className="sm:max-w-lg"
+          showCloseButton={!enroll.isPending}
+        >
+          <DialogHeader>
+            <DialogTitle>Create your merchant profile</DialogTitle>
+            <DialogDescription>
+              Your account will become a merchant. Payments settle into your
+              existing wallet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!enroll.isPending) void form.handleSubmit()
+              }}
+            >
+              <FieldGroup>
+                {(
+                  ['businessName', 'contactEmail', 'contactNumber'] as const
+                ).map((name) => (
                   <form.Field key={name} name={name}>
                     {(field) => (
                       <Field data-invalid={!field.state.meta.isValid}>
@@ -195,25 +240,27 @@ function Enrollment() {
                       </Field>
                     )}
                   </form.Field>
-                )
-              )}
-              <Button
-                type="submit"
-                disabled={enroll.isPending || user.role === 'ADMIN'}
-              >
-                {enroll.isPending && <Spinner data-icon="inline-start" />}
-                Create merchant profile
-              </Button>
-            </FieldGroup>
-          </form>
-          {enroll.error && <ErrorNotice error={enroll.error} />}
-        </CardContent>
-      </Card>
+                ))}
+                <Button
+                  type="submit"
+                  disabled={enroll.isPending || user.role === 'ADMIN'}
+                >
+                  {enroll.isPending && <Spinner data-icon="inline-start" />}
+                  Create merchant profile
+                </Button>
+              </FieldGroup>
+            </form>
+            {enroll.error && <ErrorNotice inline error={enroll.error} />}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 function Dashboard({ merchant }: { merchant: Merchant }) {
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [requestPending, setRequestPending] = useState(false)
   const user = useSession().user!
 
   const client = useQueryClient()
@@ -253,6 +300,8 @@ function Dashboard({ merchant }: { merchant: Merchant }) {
         method: 'POST',
       }),
     retry: false,
+    onSuccess: () =>
+      toast.add({ title: 'Payment request cancelled', type: 'success' }),
     onSettled: () =>
       client.invalidateQueries({
         queryKey: ['private', user.userId, 'merchant'],
@@ -277,11 +326,55 @@ function Dashboard({ merchant }: { merchant: Merchant }) {
             Merchant dashboard · {merchant.contactEmail}
           </p>
         </div>
-        <Button variant="outline" onClick={refresh}>
-          Refresh dashboard
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={refresh}>
+            <RefreshCw data-icon="inline-start" />
+            Refresh dashboard
+          </Button>
+          <Dialog
+            open={requestOpen}
+            onOpenChange={(next) => {
+              if (!requestPending) setRequestOpen(next)
+            }}
+          >
+            <DialogTrigger
+              render={<Button />}
+              disabled={merchant.status !== 'ACTIVE'}
+            >
+              <Plus data-icon="inline-start" />
+              New payment request
+            </DialogTrigger>
+            <DialogContent
+              className="sm:max-w-lg"
+              showCloseButton={!requestPending}
+            >
+              <DialogHeader>
+                <DialogTitle>Create payment request</DialogTitle>
+                <DialogDescription>
+                  A fixed amount in NPR. Your link expires in 24 hours and can
+                  be paid once.
+                </DialogDescription>
+              </DialogHeader>
+              <RequestForm
+                disabled={merchant.status !== 'ACTIVE'}
+                onPendingChange={setRequestPending}
+                onCreated={() => {
+                  setRequestOpen(false)
+                  setPage(0)
+                  refresh()
+                  toast.add({
+                    title: 'Payment request created',
+                    description:
+                      'Copy the link from your requests to share it with your customer.',
+                    type: 'success',
+                  })
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
-      <div className="grid items-start gap-6 xl:grid-cols-2">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Merchant wallet</CardTitle>
@@ -314,162 +407,113 @@ function Dashboard({ merchant }: { merchant: Merchant }) {
             </Button>
           </CardContent>
         </Card>
-        <RequestForm
-          onCreated={() => {
-            setPage(0)
-            refresh()
-          }}
-          disabled={merchant.status !== 'ACTIVE'}
-        />
+        <Card>
+          <CardHeader>
+            <CardDescription>Business profile</CardDescription>
+            <CardTitle>{merchant.businessName}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Badge variant="outline" className="w-fit">
+              <Store />
+              {merchant.status}
+            </Badge>
+            <dl className="flex flex-col gap-3 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Business email</dt>
+                <dd className="break-all">{merchant.contactEmail}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Business phone</dt>
+                <dd>{merchant.contactNumber}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment requests</CardTitle>
-          <CardDescription>
-            Share a payment link with your customer. Each request can be paid
-            once. Requests and payments refresh every 10 seconds.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {requests.error ? (
-            <ErrorNotice
-              error={requests.error}
-              retry={() => {
-                void requests.refetch()
-              }}
-            />
-          ) : requests.isPending ? (
-            <PagePending />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Request</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.data.content.map((p) => (
-                  <TableRow key={p.paymentRequestId}>
-                    <TableCell className="max-w-56 break-words">
-                      <Link
-                        to="/payments/$paymentRequestId"
-                        params={{ paymentRequestId: p.paymentRequestId }}
-                        className="hover:underline"
-                      >
-                        {p.description || p.paymentRequestId}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{formatMoney(p.amount, p.currency)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{p.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(p.expiresAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <ShareLink id={p.paymentRequestId} />
-                        {p.transactionId && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            nativeButton={false}
-                            render={
-                              <Link
-                                to="/transactions/$transactionId"
-                                params={{ transactionId: p.transactionId }}
-                              />
-                            }
-                          >
-                            Receipt
-                          </Button>
-                        )}
-                        {p.status === 'PENDING' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={cancel.isPending}
-                            onClick={() => cancel.mutate(p.paymentRequestId)}
-                          >
-                            Cancel request
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!requests.data.content.length && (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <Empty>
-                        <EmptyHeader>
-                          <EmptyTitle>No payment requests</EmptyTitle>
-                          <EmptyDescription>
-                            Create a request above to receive a payment.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-          {cancel.error && <ErrorNotice error={cancel.error} />}
-          <div className="flex items-center justify-end gap-3">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!page || requests.isFetching}
-              onClick={() => setPage(page - 1)}
-            >
-              Previous requests
-            </Button>
-            <span className="text-sm">Page {page + 1}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!requests.data?.hasNext || requests.isFetching}
-              onClick={() => setPage(page + 1)}
-            >
-              Next requests
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Incoming payments</CardTitle>
-          <CardDescription>
-            Confirmed merchant payments and receipts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {payments.error ? (
-            <ErrorNotice
-              error={payments.error}
-              retry={() => {
-                void payments.refetch()
-              }}
-            />
-          ) : (
-            <DataTable
-              data={payments.data?.content}
-              walletId={merchant.walletId}
-              loading={payments.isPending}
-              fetching={payments.isFetching}
-              pagination={pagination}
-              onPaginationChange={setPagination}
-              rowCount={payments.data?.totalElements ?? 0}
-              showPagination
-            />
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="requests" className="gap-4">
+        <TabsList variant="line">
+          <TabsTrigger value="requests">
+            <Link2 />
+            Payment requests
+          </TabsTrigger>
+          <TabsTrigger value="payments">
+            <ArrowDownLeft />
+            Incoming payments
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="requests">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment requests</CardTitle>
+              <CardDescription>
+                Share a payment link with your customer. Each request can be
+                paid once. Requests and payments refresh every 10 seconds.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {requests.error ? (
+                <ErrorNotice
+                  error={requests.error}
+                  retry={() => {
+                    void requests.refetch()
+                  }}
+                />
+              ) : (
+                <PaymentRequestsTable
+                  data={requests.data?.content}
+                  loading={requests.isPending}
+                  fetching={requests.isFetching}
+                  rowCount={requests.data?.totalElements ?? 0}
+                  pagination={{ pageIndex: page, pageSize: 20 }}
+                  onPaginationChange={(update) => {
+                    const current = { pageIndex: page, pageSize: 20 }
+                    setPage(
+                      (typeof update === 'function' ? update(current) : update)
+                        .pageIndex
+                    )
+                  }}
+                  cancelling={cancel.isPending}
+                  onCancel={cancel.mutate}
+                  onCreate={() => setRequestOpen(true)}
+                  canCreate={merchant.status === 'ACTIVE'}
+                />
+              )}
+              {cancel.error && <ErrorNotice inline error={cancel.error} />}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="payments">
+          <Card>
+            <CardHeader>
+              <CardTitle>Incoming payments</CardTitle>
+              <CardDescription>
+                Confirmed merchant payments and receipts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {payments.error ? (
+                <ErrorNotice
+                  error={payments.error}
+                  retry={() => {
+                    void payments.refetch()
+                  }}
+                />
+              ) : (
+                <DataTable
+                  data={payments.data?.content}
+                  walletId={merchant.walletId}
+                  loading={payments.isPending}
+                  fetching={payments.isFetching}
+                  pagination={pagination}
+                  onPaginationChange={setPagination}
+                  rowCount={payments.data?.totalElements ?? 0}
+                  showPagination
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
@@ -477,7 +521,9 @@ function Dashboard({ merchant }: { merchant: Merchant }) {
 function RequestForm({
   onCreated,
   disabled,
+  onPendingChange,
 }: {
+  onPendingChange: (pending: boolean) => void
   onCreated: () => void
   disabled: boolean
 }) {
@@ -489,6 +535,8 @@ function RequestForm({
       }),
     retry: false,
     onSuccess: onCreated,
+    onMutate: () => onPendingChange(true),
+    onSettled: () => onPendingChange(false),
   })
 
   const form = useForm({
@@ -510,95 +558,46 @@ function RequestForm({
   const locked = disabled || create.isPending
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create payment request</CardTitle>
-        <CardDescription>
-          Fixed amount in NPR · expires in 24 hours.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <form
-          noValidate
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!locked) void form.handleSubmit()
-          }}
-        >
-          <FieldGroup>
-            {(['amount', 'description'] as const).map((name) => (
-              <form.Field key={name} name={name}>
-                {(field) => (
-                  <Field data-invalid={!field.state.meta.isValid}>
-                    <FieldLabel htmlFor={`request-${name}`}>
-                      {name === 'amount'
-                        ? 'Request amount (NPR)'
-                        : 'Order description (optional)'}
-                    </FieldLabel>
-                    <Input
-                      id={`request-${name}`}
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={locked}
-                      aria-invalid={!field.state.meta.isValid}
-                      inputMode={name === 'amount' ? 'decimal' : 'text'}
-                      maxLength={name === 'description' ? 255 : undefined}
-                    />
-                    <FieldError errors={field.state.meta.errors} />
-                  </Field>
-                )}
-              </form.Field>
-            ))}
-            <Button type="submit" disabled={locked}>
-              {create.isPending && <Spinner data-icon="inline-start" />}Create
-              payment request
-            </Button>
-          </FieldGroup>
-        </form>
-        {create.error && <ErrorNotice error={create.error} />}
-        {create.data && (
-          <div role="status" className="flex flex-wrap items-center gap-3">
-            <p>Payment request created.</p>
-            <ShareLink id={create.data.paymentRequestId} />
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ShareLink({ id }: { id: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const [error, setError] = useState<unknown>()
-
-  const url = `${window.location.origin}/payments/${id}`
-
-  return (
-    <div className="flex flex-col gap-2">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(url)
-            setCopied(true)
-          } catch (copyError) {
-            setError(copyError)
-          }
+    <div className="flex flex-col gap-4">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!locked) void form.handleSubmit()
         }}
       >
-        {copied ? 'Link copied' : 'Copy payment link'}
-      </Button>
-      {error ? (
-        <Input
-          aria-label="Payment link"
-          readOnly
-          value={url}
-          onFocus={(e) => e.target.select()}
-        />
-      ) : null}
+        <FieldGroup>
+          {(['amount', 'description'] as const).map((name) => (
+            <form.Field key={name} name={name}>
+              {(field) => (
+                <Field data-invalid={!field.state.meta.isValid}>
+                  <FieldLabel htmlFor={`request-${name}`}>
+                    {name === 'amount'
+                      ? 'Request amount (NPR)'
+                      : 'Order description (optional)'}
+                  </FieldLabel>
+                  <Input
+                    id={`request-${name}`}
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
+                    disabled={locked}
+                    aria-invalid={!field.state.meta.isValid}
+                    inputMode={name === 'amount' ? 'decimal' : 'text'}
+                    maxLength={name === 'description' ? 255 : undefined}
+                  />
+                  <FieldError errors={field.state.meta.errors} />
+                </Field>
+              )}
+            </form.Field>
+          ))}
+          <Button type="submit" disabled={locked}>
+            {create.isPending && <Spinner data-icon="inline-start" />}Create
+            payment request
+          </Button>
+        </FieldGroup>
+      </form>
+      {create.error && <ErrorNotice inline error={create.error} />}
     </div>
   )
 }

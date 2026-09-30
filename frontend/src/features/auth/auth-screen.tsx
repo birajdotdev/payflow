@@ -135,7 +135,7 @@ export function AuthScreen({
           }
         >
           {registered && (
-            <Alert>
+            <Alert variant="success">
               <AlertTitle>Your wallet is ready</AlertTitle>
               <AlertDescription>
                 Account created. Sign in to get started.
@@ -144,7 +144,7 @@ export function AuthScreen({
           )}
 
           {session.logoutUnconfirmed && (
-            <Alert>
+            <Alert variant="warning">
               <AlertTitle>Server logout is unconfirmed</AlertTitle>
               <AlertDescription>
                 Your local session was cleared, but we could not confirm
@@ -160,7 +160,7 @@ export function AuthScreen({
             </Alert>
           )}
 
-          {logout.error && <ErrorNotice error={logout.error} />}
+          {logout.error && <ErrorNotice inline error={logout.error} />}
 
           <form
             noValidate
@@ -233,7 +233,7 @@ export function AuthScreen({
                 </form.Field>
               ))}
 
-              {mutation.error && <ErrorNotice error={mutation.error} />}
+              {mutation.error && <ErrorNotice inline error={mutation.error} />}
 
               <form.Subscribe selector={(state) => [state.isSubmitting]}>
                 {([submitting]) => (

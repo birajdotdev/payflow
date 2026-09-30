@@ -29,6 +29,9 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
     await account(merchant, 'Merchant', seed)
     await account(customer, 'Customer', (BigInt(seed) + 1n).toString())
     await merchant.goto('/merchant')
+    await merchant
+      .getByRole('button', { name: 'Set up merchant profile' })
+      .click()
     await merchant.getByLabel('Business name').fill('Browser Shop')
     await merchant
       .getByRole('button', { name: 'Create merchant profile' })
@@ -36,6 +39,10 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
     await expect(
       merchant.getByRole('heading', { name: 'Browser Shop' })
     ).toBeVisible()
+    await merchant
+      .getByRole('button', { name: 'New payment request' })
+      .first()
+      .click()
     await merchant.getByLabel('Request amount (NPR)').fill('250.25')
     await merchant
       .getByLabel('Order description (optional)')
@@ -52,6 +59,7 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
     await merchant.reload()
     await expect(link).toBeVisible()
     await customer.goto('/wallet')
+    await customer.getByRole('button', { name: 'Add demo funds' }).click()
     await customer.getByLabel('Amount (NPR)').fill('1000.00')
     await customer
       .getByRole('button', { name: 'Add funds', exact: true })
@@ -102,6 +110,10 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
       )
     ).toEqual([])
     await customer.getByRole('button', { name: 'View receipt' }).click()
+    await expect(
+      customer.getByRole('dialog', { name: 'Transaction receipt' })
+    ).toBeVisible()
+    await customer.getByRole('button', { name: 'Open full receipt' }).click()
     const receiptUrl = customer.url()
     await expect(
       customer.getByText('Merchant payment', { exact: true })
@@ -122,13 +134,21 @@ test('merchant enrollment, request, customer payment, lost response retry, and s
     await expect(
       merchant.getByText('NPR 250.25', { exact: true }).first()
     ).toBeVisible()
+    await merchant.getByRole('tab', { name: 'Incoming payments' }).click()
     await expect(
       merchant.getByRole('link', {
         name: 'Merchant payment received',
         exact: true,
       })
     ).toHaveCount(1)
+    await merchant
+      .getByRole('tab', { name: 'Payment requests', exact: true })
+      .click()
     await merchant.getByRole('button', { name: 'Receipt', exact: true }).click()
+    await expect(
+      merchant.getByRole('dialog', { name: 'Transaction receipt' })
+    ).toBeVisible()
+    await merchant.getByRole('button', { name: 'Open full receipt' }).click()
     await expect(merchant).toHaveURL(receiptUrl)
     await expect(
       merchant.getByText('Order #1028', { exact: true })

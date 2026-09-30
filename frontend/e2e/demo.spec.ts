@@ -53,6 +53,7 @@ test('two users fund, transfer, restore, safely retry and revoke logout', async 
       'Bob Demo',
       (BigInt(seed) + 1n).toString()
     )
+    await alice.getByRole('button', { name: 'Add demo funds' }).click()
     await alice.getByLabel('Amount (NPR)').fill('1000.00')
     await alice.getByRole('button', { name: 'Add funds', exact: true }).click()
     await expect(
@@ -104,6 +105,10 @@ test('two users fund, transfer, restore, safely retry and revoke logout', async 
     expect(attempts).toHaveLength(2)
     expect(attempts[1]).toEqual(attempts[0])
     await alice.getByRole('button', { name: 'View receipt' }).click()
+    await expect(
+      alice.getByRole('dialog', { name: 'Transaction receipt' })
+    ).toBeVisible()
+    await alice.getByRole('button', { name: 'Open full receipt' }).click()
     await expect(alice).toHaveURL(/\/transactions\/[a-f0-9-]+/)
     await alice.reload()
     await expect(alice.getByText('Browser demo', { exact: true })).toBeVisible()

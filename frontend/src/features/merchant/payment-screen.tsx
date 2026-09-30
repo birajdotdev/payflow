@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { CircleHelp } from 'lucide-react'
+import { CircleHelp, CircleCheck, Store, ShieldCheck } from 'lucide-react'
 
 import { ErrorNotice, PagePending } from '@/components/feedback'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -14,8 +13,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { useSession } from '@/features/auth/session'
+import { ReceiptDialog } from '@/features/financial/receipt-dialog'
 import { useFinancialOperation } from '@/features/financial/use-financial-operation'
 import { formatMoney } from '@/features/wallet/queries'
 
@@ -72,7 +73,13 @@ function PaymentReview({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Pay merchant</h1>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <Store aria-hidden="true" className="size-8 text-muted-foreground" />
+        <h1 className="text-2xl font-semibold tracking-tight">Pay merchant</h1>
+        <p className="text-sm text-muted-foreground">
+          A payment to {payment.businessName}
+        </p>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>{payment.businessName}</CardTitle>
@@ -85,9 +92,10 @@ function PaymentReview({
           <Badge variant="outline" className="w-fit">
             {receipt ? 'PAID' : payment.status}
           </Badge>
-          <p className="text-3xl font-semibold tabular-nums">
+          <p className="text-4xl font-semibold tracking-tight tabular-nums">
             {formatMoney(payment.amount, payment.currency)}
           </p>
+          <Separator />
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-4 text-sm">
             <dt>Order</dt>
             <dd className="break-words">{payment.description || '—'}</dd>
@@ -101,7 +109,7 @@ function PaymentReview({
             <dd className="break-all">{payment.paymentRequestId}</dd>
           </dl>
           {operation.unknown && operation.intent ? (
-            <Alert role="status">
+            <Alert variant="warning" role="status">
               <CircleHelp />
               <AlertTitle>Outcome unknown</AlertTitle>
               <AlertDescription className="flex flex-col gap-4">
@@ -139,7 +147,7 @@ function PaymentReview({
                   </p>
                 )}
                 {operation.lookup.error && (
-                  <ErrorNotice error={operation.lookup.error} />
+                  <ErrorNotice inline error={operation.lookup.error} />
                 )}
                 <details>
                   <summary>Request details</summary>
@@ -150,22 +158,14 @@ function PaymentReview({
               </AlertDescription>
             </Alert>
           ) : receipt ? (
-            <Alert role="status">
+            <Alert variant="success" role="status">
+              <CircleCheck />
               <AlertTitle>Payment confirmed.</AlertTitle>
               <AlertDescription>
                 <p>Your merchant payment is recorded.</p>
-                <Button
-                  className="mt-3"
-                  nativeButton={false}
-                  render={
-                    <Link
-                      to="/transactions/$transactionId"
-                      params={{ transactionId: receipt }}
-                    />
-                  }
-                >
-                  View receipt
-                </Button>
+                <div className="mt-3">
+                  <ReceiptDialog transactionId={receipt} />
+                </div>
               </AlertDescription>
             </Alert>
           ) : (
@@ -191,7 +191,7 @@ function PaymentReview({
                 </p>
               )}
               {operation.mutation.error && (
-                <ErrorNotice error={operation.mutation.error} />
+                <ErrorNotice inline error={operation.mutation.error} />
               )}
             </div>
           )}
@@ -199,7 +199,10 @@ function PaymentReview({
             Refresh payment status
           </Button>
         </CardContent>
-        <CardFooter>Simulated funds · No real money is moved</CardFooter>
+        <CardFooter className="justify-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck />
+          Simulated funds · No real money is moved
+        </CardFooter>
       </Card>
     </div>
   )

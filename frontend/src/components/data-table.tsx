@@ -1,15 +1,14 @@
 import { Link } from '@tanstack/react-router'
 // PayFlow adaptation of shadcn dashboard-01's TanStack Table v9 data table.
-import {
-  createColumnHelper,
-  rowPaginationFeature,
-  tableFeatures,
-  useTable,
-} from '@tanstack/react-table'
+import { createColumnHelper } from '@tanstack/react-table'
 import type { OnChangeFn, PaginationState } from '@tanstack/react-table'
 import { ArrowDownLeft, ArrowUpRight, ReceiptText } from 'lucide-react'
 import { useMemo } from 'react'
 
+import {
+  ServerDataTable,
+  dataTableFeatures,
+} from '@/components/server-data-table'
 import { TransactionStatus } from '@/components/transaction-status'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,18 +18,10 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ReceiptDialog } from '@/features/financial/receipt-dialog'
 import { formatMoney } from '@/features/wallet/queries'
 import type { Transaction } from '@/features/wallet/queries'
-const features = tableFeatures({ rowPaginationFeature })
+const features = dataTableFeatures
 const helper = createColumnHelper<typeof features, Transaction>()
 const emptyRows: Transaction[] = []
 export function DataTable({
@@ -127,135 +118,49 @@ export function DataTable({
           id: 'receipt',
           header: () => <span className="sr-only">Receipt</span>,
           cell: ({ row }) => (
-            <Button
-              variant="ghost"
-              size="icon"
-              nativeButton={false}
-              render={
-                <Link
-                  to="/transactions/$transactionId"
-                  params={{ transactionId: row.original.transactionId }}
-                />
+            <ReceiptDialog
+              transactionId={row.original.transactionId}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`View receipt ${row.original.reference}`}
+                >
+                  <ReceiptText />
+                </Button>
               }
-              aria-label={`View receipt ${row.original.reference}`}
-            >
-              <ReceiptText />
-            </Button>
+            />
           ),
         }),
       ]),
     [walletId]
   )
-  const table = useTable({
-    features,
-    data,
-    columns,
-    getRowId: (row) => row.transactionId,
-    manualPagination: true,
-    rowCount,
-    autoResetPageIndex: false,
-    state: { pagination },
-    onPaginationChange,
-  })
   return (
-    <div className="flex flex-col gap-4">
-      <div
-        className="overflow-hidden rounded-lg border"
-        aria-busy={loading || fetching}
-      >
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {group.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    className={
-                      header.column.id === 'amount' ? 'text-right' : undefined
-                    }
-                  >
-                    {header.isPlaceholder ? null : (
-                      <table.FlexRender header={header} />
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 5 }, (_, index) => (
-                <TableRow key={index}>
-                  {columns.map((_, column) => (
-                    <TableCell key={column}>
-                      <Skeleton className="h-8 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : table.getRowModel().rows.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getAllCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      className={
-                        cell.column.id === 'amount' ? 'text-right' : undefined
-                      }
-                    >
-                      <table.FlexRender cell={cell} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length}>
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <ReceiptText />
-                      </EmptyMedia>
-                      <EmptyTitle>No transactions yet</EmptyTitle>
-                      <EmptyDescription>
-                        Your deposits and transfers will appear here. If filters
-                        are applied, try a different view.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      {showPagination && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {rowCount} {rowCount === 1 ? 'transaction' : 'transactions'} · Page{' '}
-            {pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())}
-            {fetching ? ' · Updating…' : ''}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!table.getCanPreviousPage() || fetching}
-              onClick={() => table.previousPage()}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!table.getCanNextPage() || fetching}
-              onClick={() => table.nextPage()}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+    <ServerDataTable
+      data={data}
+      columns={columns}
+      getRowId={(row) => row.transactionId}
+      loading={loading}
+      fetching={fetching}
+      rowCount={rowCount}
+      pagination={pagination}
+      onPaginationChange={onPaginationChange}
+      showPagination={showPagination}
+      itemName="transaction"
+      emptyState={
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ReceiptText />
+            </EmptyMedia>
+            <EmptyTitle>No transactions yet</EmptyTitle>
+            <EmptyDescription>
+              Your deposits and transfers will appear here. If filters are
+              applied, try a different view.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      }
+    />
   )
 }
