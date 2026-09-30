@@ -5,6 +5,10 @@ import viteReact from '@vitejs/plugin-react'
 import { defineConfig, lazyPlugins } from 'vite-plus'
 
 const config = defineConfig({
+  test: {
+    // The scaffold has no tests yet; keep the baseline CI sequence runnable.
+    passWithNoTests: true,
+  },
   lint: {
     plugins: ['oxc', 'typescript', 'unicorn', 'import'],
     categories: {
