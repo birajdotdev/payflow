@@ -6,20 +6,25 @@ The canonical API namespace is **`/api/v1/merchants`**. The SPA dashboard is
 ## Customer → merchant → shared receipt
 
 1. Register a merchant and customer in separate browser sessions. Each starts with
-   one NPR 0.00 wallet. On the merchant account, open `/merchant`, enter the
-   business name and business contacts, and create the profile. The backend
+   one NPR 0.00 wallet. On the merchant account, open `/merchant`, choose
+   **Set up merchant profile**, enter the business name and business contacts in
+   the dialog, and choose **Create merchant profile**. The backend
    assigns MERCHANT and binds the existing wallet; the browser cannot select
    roles, accounts, wallets, or balances.
-2. Create a request for **NPR 250.25**, description **Order #1028**. It is PENDING
-   and expires in 24 hours. Copy the payment link.
-3. Add **NPR 1,000.00** to the customer's wallet. Open the merchant's payment link
+2. Choose **New payment request** and create a request for **NPR 250.25**,
+   description **Order #1028**, in the dialog. It is PENDING and expires in
+   24 hours. Copy the link from the **Payment requests** tab.
+3. On the customer's wallet, choose **Add demo funds** and add **NPR 1,000.00**
+   in the dialog. Open the merchant's payment link
    in that customer's session. Verify the business name, order, fixed amount,
    NPR 0.00 fee, and NPR 250.25 total; confirm payment.
 4. The customer has **NPR 749.75**, the merchant has **NPR 250.25**, the request is
    PAID, and there is **one SUCCESS / MERCHANT_PAYMENT** transaction. Both
    participants can open the same reference and transaction receipt. Refresh the
-   merchant dashboard to see the incoming payment, balance, and receipt. It also
-   refreshes automatically every 10 seconds.
+   merchant dashboard to see the balance and PAID request. Open the **Incoming
+   payments** tab to see its single settlement. **View receipt** (or **Receipt**
+   on the merchant request) opens a preview dialog; **Open full receipt** provides the shareable receipt route. Dashboard
+   data also refreshes automatically every 10 seconds.
 5. A repeated same-key payment returns that identical receipt without changing
    balances. A new key or another customer attempting that paid request receives
    `409 / PAYMENT_REQUEST_PAID` and causes no wallet update. Reusing the original
