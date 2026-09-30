@@ -64,6 +64,7 @@ export function safeReturn(value: unknown): string {
     '/dashboard',
     '/wallet',
     '/send',
+    '/profile',
     '/transactions',
     '/transactions/',
   ].includes(path) || /^\/transactions\/[0-9a-f-]{36}$/i.test(path)

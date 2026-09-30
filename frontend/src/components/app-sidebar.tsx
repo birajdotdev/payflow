@@ -5,6 +5,7 @@ import {
   History,
   LayoutDashboard,
   WalletCards,
+  UserRound,
 } from 'lucide-react'
 
 import { Brand } from '@/components/brand'
@@ -33,6 +34,7 @@ import type { User } from '@/features/auth/contracts'
 const navigation = linkOptions([
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { to: '/wallet', label: 'My wallet', icon: WalletCards },
+  { to: '/profile', label: 'Profile', icon: UserRound },
   { to: '/send', label: 'Send money', icon: ArrowUpRight },
   {
     to: '/transactions',

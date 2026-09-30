@@ -40,6 +40,9 @@ import { useFinancialOperation } from './use-financial-operation'
 export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
   const {
     form,
+    review,
+    editReview,
+    confirmTransfer,
     intent,
     unknown,
     receipt,
@@ -62,109 +65,148 @@ export function FundingScreen({ transfer = false }: { transfer?: boolean }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <form
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!locked) void form.handleSubmit()
-          }}
-        >
-          <FieldGroup>
-            {(
-              [
-                'amount',
-                ...(transfer
-                  ? (['receiverWalletId', 'description'] as const)
-                  : []),
-              ] as const
-            ).map((name) => (
-              <form.Field key={name} name={name}>
-                {(field) => {
-                  const invalid =
-                    field.state.meta.isTouched && !field.state.meta.isValid
-                  const inputProps = {
-                    id: name,
-                    name,
-                    value: field.state.value,
-                    disabled: locked,
-                    onBlur: field.handleBlur,
-                    onChange: (
-                      event: React.ChangeEvent<
-                        HTMLInputElement | HTMLTextAreaElement
-                      >
-                    ) => field.handleChange(event.target.value),
-                    'aria-invalid': invalid,
-                    'aria-describedby': `${name}-hint${invalid ? ` ${name}-error` : ''}`,
-                  }
-                  return (
-                    <Field data-invalid={invalid} data-disabled={locked}>
-                      <FieldLabel htmlFor={name}>
-                        {name === 'amount'
-                          ? 'Amount (NPR)'
-                          : name === 'description'
-                            ? 'Description (optional)'
-                            : 'Recipient wallet number'}
-                      </FieldLabel>
-                      {name === 'amount' ? (
-                        <InputGroup>
-                          <InputGroupAddon>
-                            <InputGroupText>NPR</InputGroupText>
-                          </InputGroupAddon>
-                          <InputGroupInput
+        {review ? (
+          <section aria-label="Transfer review" className="flex flex-col gap-6">
+            <h2
+              className="text-lg font-semibold"
+              tabIndex={-1}
+              ref={(node) => node?.focus()}
+            >
+              Review transfer
+            </h2>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-4 text-sm">
+              <dt>Recipient</dt>
+              <dd className="break-all">{review.receiverWalletId}</dd>
+              <dt>Amount</dt>
+              <dd>NPR {review.amount}</dd>
+              <dt>Fee</dt>
+              <dd>NPR 0.00</dd>
+              <dt>Total</dt>
+              <dd>NPR {review.amount}</dd>
+              {review.description ? (
+                <>
+                  <dt>Description</dt>
+                  <dd className="break-words">{review.description}</dd>
+                </>
+              ) : null}
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              PayFlow demo transfers have no fee. Confirm to send this amount.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={editReview}>
+                Edit transfer
+              </Button>
+              <Button disabled={locked} onClick={confirmTransfer}>
+                Confirm transfer
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <form
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!locked) void form.handleSubmit()
+            }}
+          >
+            <FieldGroup>
+              {(
+                [
+                  'amount',
+                  ...(transfer
+                    ? (['receiverWalletId', 'description'] as const)
+                    : []),
+                ] as const
+              ).map((name) => (
+                <form.Field key={name} name={name}>
+                  {(field) => {
+                    const invalid =
+                      field.state.meta.isTouched && !field.state.meta.isValid
+                    const inputProps = {
+                      id: name,
+                      name,
+                      value: field.state.value,
+                      disabled: locked,
+                      onBlur: field.handleBlur,
+                      onChange: (
+                        event: React.ChangeEvent<
+                          HTMLInputElement | HTMLTextAreaElement
+                        >
+                      ) => field.handleChange(event.target.value),
+                      'aria-invalid': invalid,
+                      'aria-describedby': `${name}-hint${invalid ? ` ${name}-error` : ''}`,
+                    }
+                    return (
+                      <Field data-invalid={invalid} data-disabled={locked}>
+                        <FieldLabel htmlFor={name}>
+                          {name === 'amount'
+                            ? 'Amount (NPR)'
+                            : name === 'description'
+                              ? 'Description (optional)'
+                              : 'Recipient wallet number'}
+                        </FieldLabel>
+                        {name === 'amount' ? (
+                          <InputGroup>
+                            <InputGroupAddon>
+                              <InputGroupText>NPR</InputGroupText>
+                            </InputGroupAddon>
+                            <InputGroupInput
+                              {...inputProps}
+                              inputMode="decimal"
+                              placeholder="0.00"
+                            />
+                          </InputGroup>
+                        ) : name === 'description' ? (
+                          <Textarea
                             {...inputProps}
-                            inputMode="decimal"
-                            placeholder="0.00"
+                            placeholder="What is this transfer for?"
+                            maxLength={255}
                           />
-                        </InputGroup>
-                      ) : name === 'description' ? (
-                        <Textarea
-                          {...inputProps}
-                          placeholder="What is this transfer for?"
-                          maxLength={255}
-                        />
-                      ) : (
-                        <Input
-                          {...inputProps}
-                          placeholder="Paste the recipient’s wallet UUID"
-                          autoComplete="off"
-                        />
-                      )}
-                      <FieldDescription id={`${name}-hint`}>
-                        {name === 'amount'
-                          ? transfer
-                            ? 'NPR 0.01 to 1,000,000.00. Up to two decimal places.'
-                            : 'NPR 0.01 to 100,000.00 per deposit.'
-                          : name === 'description'
-                            ? 'A short note to identify your transfer. Up to 255 characters.'
-                            : 'Ask the recipient to share their wallet number from My wallet.'}
-                      </FieldDescription>
-                      {invalid && (
-                        <FieldError
-                          id={`${name}-error`}
-                          errors={field.state.meta.errors}
-                        />
-                      )}
-                    </Field>
-                  )
-                }}
-              </form.Field>
-            ))}
-            <Button type="submit" size="lg" disabled={locked}>
-              {mutation.isPending ? (
-                <Spinner data-icon="inline-start" />
-              ) : transfer ? (
-                <ArrowUpRight data-icon="inline-start" />
-              ) : (
-                <Plus data-icon="inline-start" />
-              )}
-              {mutation.isPending
-                ? 'Submitting…'
-                : transfer
-                  ? 'Send money'
-                  : 'Add funds'}
-            </Button>
-          </FieldGroup>
-        </form>
+                        ) : (
+                          <Input
+                            {...inputProps}
+                            placeholder="Paste the recipient’s wallet UUID"
+                            autoComplete="off"
+                          />
+                        )}
+                        <FieldDescription id={`${name}-hint`}>
+                          {name === 'amount'
+                            ? transfer
+                              ? 'NPR 0.01 to 1,000,000.00. Up to two decimal places.'
+                              : 'NPR 0.01 to 100,000.00 per deposit.'
+                            : name === 'description'
+                              ? 'A short note to identify your transfer. Up to 255 characters.'
+                              : 'Ask the recipient to share their wallet number from My wallet.'}
+                        </FieldDescription>
+                        {invalid && (
+                          <FieldError
+                            id={`${name}-error`}
+                            errors={field.state.meta.errors}
+                          />
+                        )}
+                      </Field>
+                    )
+                  }}
+                </form.Field>
+              ))}
+              <Button type="submit" size="lg" disabled={locked}>
+                {mutation.isPending ? (
+                  <Spinner data-icon="inline-start" />
+                ) : transfer ? (
+                  <ArrowUpRight data-icon="inline-start" />
+                ) : (
+                  <Plus data-icon="inline-start" />
+                )}
+                {mutation.isPending
+                  ? 'Submitting…'
+                  : transfer
+                    ? 'Review transfer'
+                    : 'Add funds'}
+              </Button>
+            </FieldGroup>
+          </form>
+        )}
         {mutation.error && !unknown && <ErrorNotice error={mutation.error} />}
         {unknown && intent && (
           <Alert role="status">

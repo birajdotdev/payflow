@@ -49,6 +49,7 @@ export function useFinancialOperation(transfer: boolean) {
     else sessionStorage.removeItem(storageKey)
     client.setQueryData(intentKey, value)
   }
+  const [review, setReview] = useState<Intent['payload'] | null>(null)
   const [uncertain, setUnknown] = useState(false)
   const [receipt, setReceipt] = useState<string | null>(null)
   const complete = (id: string) => {
@@ -93,10 +94,15 @@ export function useFinancialOperation(transfer: boolean) {
     },
     validators: { onSubmit: schema },
     onSubmit: async ({ value }) => {
+      if (transfer) {
+        mutation.reset()
+        setReview({ ...value })
+        return
+      }
       const saved: Intent = {
-        operation: transfer ? 'TRANSFER' : 'DEPOSIT',
+        operation: 'DEPOSIT',
         key: crypto.randomUUID(),
-        payload: transfer ? { ...value } : { amount: value.amount },
+        payload: { amount: value.amount },
       }
       setIntent(saved)
       await mutation.mutateAsync(saved).catch(() => undefined)
@@ -108,6 +114,19 @@ export function useFinancialOperation(transfer: boolean) {
     mutation.isPending || lookup.isPending || unknown || receipt !== null
   return {
     form,
+    review,
+    editReview: () => setReview(null),
+    confirmTransfer: () => {
+      if (!review || locked) return
+      const saved: Intent = {
+        operation: 'TRANSFER',
+        key: crypto.randomUUID(),
+        payload: { ...review },
+      }
+      setReview(null)
+      setIntent(saved)
+      mutation.mutate(saved)
+    },
     intent,
     unknown,
     receipt,
