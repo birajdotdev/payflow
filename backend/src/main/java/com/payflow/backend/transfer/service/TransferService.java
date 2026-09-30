@@ -13,6 +13,7 @@ import com.payflow.backend.transfer.dto.TransferResponse;
 import com.payflow.backend.wallet.entity.Wallet;
 import com.payflow.backend.wallet.repository.WalletRepository;
 import com.payflow.backend.wallet.service.DepositService;
+import com.payflow.backend.wallet.service.WalletAvailability;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ public class TransferService {
     private final CurrentUserService currentUserService;
 
     private final WalletRepository wallets;
+
+    private final WalletAvailability availability;
 
     private final TransactionRepository transactions;
 
@@ -69,6 +72,8 @@ public class TransferService {
             }
             return TransferResponse.from(transaction);
         }
+        availability.requireActive(sender, receiver);
+
         sender.transferTo(receiver, amount.setScale(2));
         wallets.flush();
         var transaction = FinancialTransaction.transfer(senderId, receiverId, amount.setScale(2), request.description(),

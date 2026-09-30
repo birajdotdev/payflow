@@ -65,6 +65,12 @@ public class SecurityConfig {
                 .hasRole("MERCHANT")
                 .requestMatchers(HttpMethod.POST, "/api/v1/payments/{id}/pay")
                 .hasAnyRole("USER", "MERCHANT")
+                .requestMatchers(HttpMethod.GET, "/api/v1/admin/accounts", "/api/v1/admin/accounts/{id}",
+                        "/api/v1/admin/wallets", "/api/v1/admin/wallets/{id}")
+                .hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/admin/accounts/{id}/status",
+                        "/api/v1/admin/wallets/{id}/status")
+                .hasRole("ADMIN")
                 .anyRequest()
                 .denyAll())
             .oauth2ResourceServer(resourceServer -> resourceServer.jwt(jwt -> jwt.jwtAuthenticationConverter(converter))

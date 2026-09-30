@@ -5,6 +5,7 @@ import { ArrowUpRight, RefreshCw } from 'lucide-react'
 import { DataTable } from '@/components/data-table'
 import { ErrorNotice } from '@/components/feedback'
 import { SectionCards } from '@/components/section-cards'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,6 +70,16 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
           </Button>
         </div>
       </div>
+      {wallet.data?.status === 'FROZEN' && (
+        <Alert>
+          <AlertTitle>Wallet frozen</AlertTitle>
+          <AlertDescription>
+            New deposits, transfers, payments and refunds are blocked. You can
+            still view your history and recover already committed operations.
+            Contact an administrator for help.
+          </AlertDescription>
+        </Alert>
+      )}
       {profile.error && (
         <ErrorNotice
           error={profile.error}
@@ -161,7 +172,12 @@ export function WalletScreen({ overview = false }: { overview?: boolean }) {
             <CardContent className="flex flex-col gap-6">
               {wallet.data && (
                 <>
-                  <Badge variant="secondary" className="w-fit">
+                  <Badge
+                    variant={
+                      wallet.data.status === 'ACTIVE' ? 'success' : 'warning'
+                    }
+                    className="w-fit"
+                  >
                     {wallet.data.status}
                   </Badge>
                   <dl className="grid gap-5">

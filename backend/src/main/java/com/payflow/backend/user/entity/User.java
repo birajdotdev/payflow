@@ -49,6 +49,10 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
+    public void setStatus(UserStatus status) {
+        this.status = status;
+    }
+
     public void becomeMerchant() {
         if (role == UserRole.USER)
             role = UserRole.MERCHANT;

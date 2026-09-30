@@ -12,6 +12,7 @@ import com.payflow.backend.transaction.entity.TransactionType;
 import com.payflow.backend.transaction.repository.TransactionRepository;
 import com.payflow.backend.user.entity.UserRole;
 import com.payflow.backend.wallet.repository.WalletRepository;
+import com.payflow.backend.wallet.service.WalletAvailability;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,6 +31,8 @@ public class MerchantService {
 
     private final WalletRepository wallets;
 
+    private final WalletAvailability availability;
+
     private final TransactionRepository transactions;
 
     @Transactional
@@ -41,6 +44,8 @@ public class MerchantService {
 
         // Serialize enrollment for this account, including concurrent profile creation.
         var wallet = wallets.findByUserIdForUpdate(owner.getId()).orElseThrow();
+        availability.requireActive(wallet);
+
         var existing = merchants.findByUserId(owner.getId());
 
         if (existing.isPresent()) {
