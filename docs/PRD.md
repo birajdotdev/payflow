@@ -2,7 +2,7 @@
 
 ## PayFlow — Digital Wallet & Payment Platform
 
-**Document Version:** 1.3\
+**Document Version:** 1.4\
 **Last Updated:** 2026-09-30\
 **Product Type:** Fintech / Digital Wallet Platform  
 **Primary Objective:** Portfolio and learning project demonstrating production-oriented Java Spring Boot backend development  
@@ -10,8 +10,9 @@
 **Frontend:** React + TypeScript SPA, Vite+ (Vite-based toolchain), TanStack Router, TanStack Query, TanStack Form, Zod, Tailwind CSS, shadcn/ui, Axios\
 **Backend:** Java 21 + Spring Boot  
 **Database:** PostgreSQL  
+**Milestone:** MVP complete — 2026-09-30
 
-**Architecture decision:** The browser renders the application and calls the Spring Boot REST API. Vite+ supplies frontend development, checks, tests, and production builds. Spring Boot owns authentication, authorization, roles, ownership, validation, balances, transaction outcomes, idempotency, business logic, and persistence. TanStack Form manages client-side form state and submission; Axios supplies the shared HTTP client used by TanStack Query. Sections 31–36 and 41 define the integration; section 55 tracks the transition from the existing scaffold.
+**Architecture decision:** The browser renders the application and calls the Spring Boot REST API. Vite+ supplies frontend development, checks, tests, and production builds. Spring Boot owns authentication, authorization, roles, ownership, validation, balances, transaction outcomes, idempotency, business logic, and persistence. TanStack Form manages client-side form state and submission; Axios supplies the shared HTTP client used by TanStack Query. Sections 31–36 and 41 define the integration; section 55 records the completed MVP implementation and validation.
 
 ---
 
@@ -833,7 +834,7 @@ User
  │
  ├── N:1 ── Role
  │
- └── 1:N ── AuthSession ── 1:1 ── RefreshToken (MVP)
+ └── 1:N ── LoginSession ── 1:1 ── RefreshToken (MVP)
 
 Wallet
  │
@@ -961,7 +962,7 @@ created_at
 
 ---
 
-## auth_sessions
+## login_sessions (implemented MVP)
 
 ```text
 id                         # JWT sid and login-session identifier
@@ -969,24 +970,19 @@ user_id
 created_at
 absolute_expires_at
 idle_expires_at
-last_refreshed_at
 revoked_at
-revocation_reason
 ```
 
-## refresh_tokens
+## refresh_tokens (implemented MVP)
 
 ```text
-id
-session_id                 # unique in MVP; one refresh token per session
-token_hash                 # unique; never the raw token
-created_at
-expires_at                 # absolute token lifetime; session idle deadline also applies
+token_hash                 # primary key; SHA-256 hash, never the raw token
+session_id                 # unique; one refresh token per session
 ```
 
-Add these tables through a new Flyway migration, with foreign keys, unique token hashes, and indexes for user sessions, token lookup, and expiry cleanup. Enforce one refresh token per session in MVP; the session determines whether that token is still authorized. Session deadline updates and logout must share the same transaction discipline. A later rotation/reuse implementation may add `consumed_at`, `replaced_by_token_id`, multiple historical tokens per session, and retention rules through a separate Flyway migration.
+Flyway migration `V5__create_login_sessions.sql` creates these tables with foreign keys, a user-session index, unique token hashes/session IDs, and deadline constraints. The login session owns both idle and absolute expiry; refresh tokens do not maintain separate expiry timestamps. Refresh deadline updates and logout use transactional session locking. A later rotation/reuse implementation may add historical token records, consumption/replacement metadata, retention rules, and expiry-cleanup indexes through a separate migration.
 
-The authentication change requires these new tables; existing financial tables remain unchanged.
+Existing financial tables remain unchanged by this authentication migration.
 
 ---
 
@@ -1346,26 +1342,17 @@ The development environment should be runnable using:
 docker compose up
 ```
 
-Suggested containers:
+The implemented Compose stack contains:
 
 ```text
-payflow-backend
-postgres
+backend                    # Java 21 + Spring Boot REST API
+postgres                   # PostgreSQL persistence
+frontend                   # Nginx static web server and /api reverse proxy
 ```
 
-Later:
+The frontend image uses the pinned Vite+ build image and frozen pnpm lockfile, installs through `vp install --frozen-lockfile`, builds with `vp build` (including route generation through the router plugin), and copies `frontend/dist` into Nginx. Node.js and Vite+ are build-time tools, not production serving processes. Nginx implements the API proxy and SPA fallback described in section 35, while missing assets return 404. CI also explicitly runs `vp run generate-routes` before checks.
 
-```text
-payflow-frontend (static web server and /api reverse proxy)
-redis
-notification-service
-```
-
-may also be containerized.
-
-When containerized, the frontend image shall use pinned Node.js/pnpm/Vite+ versions and the frozen pnpm lockfile, install through `vp install --frozen-lockfile`, generate routes with `vp run generate-routes`, build with `vp build`, and copy `frontend/dist` into a static web server image. Node.js and Vite+ are build-time tools, not production serving processes. The web server shall implement the API proxy and SPA fallback described in section 35.
-
-During development, PostgreSQL/backend may run through Compose while the frontend runs locally with `vp run dev`. Frontend containerization remains a later enhancement; the MVP must document both local development and static-build serving.
+During development, PostgreSQL/backend may run through Compose while the frontend runs locally with `vp run dev`. Both local development and the complete container stack are documented in the root README. Redis and a notification service remain later enhancements.
 
 ---
 
@@ -1792,7 +1779,7 @@ Architecture should nevertheless avoid unnecessary coupling that would prevent f
 
 # 45. MVP Scope
 
-The first portfolio-ready release should contain:
+**Milestone achieved: MVP complete on 2026-09-30.** The implemented portfolio-ready release contains:
 
 ```text
 User registration
@@ -1801,15 +1788,15 @@ BCrypt password hashing
 Short-lived access JWT authentication
 HttpOnly refresh cookie, backend session record, and session restoration
 POST /auth/refresh, POST /auth/logout, GET /auth/me
-Protected SPA routes
+Protected SPA routes and current-user profile
 Server-side logout and immediate session revocation
 Authentication-flow CSRF protection
 Role-based authorization
 Wallet creation
 Simulated deposit
 Wallet balance
-P2P transfer
-Transaction history
+P2P transfer with recipient/amount/fee/total review and explicit confirmation
+Transaction history with URL filters and pagination
 Transaction details
 BigDecimal money handling
 Database transactions
@@ -1973,7 +1960,7 @@ A useful architecture diagram should also be included.
 
 **PayFlow — Digital Wallet & Payment Platform**
 
-Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transaction history and merchant payment workflows.
+Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transfer confirmation, transaction history and receipts. Merchant payment workflows remain Phase 2 scope.
 
 Implemented **atomic financial transactions, BigDecimal-based monetary calculations, idempotent payment requests and concurrency controls** to prevent duplicate transactions and inconsistent wallet balances.
 
@@ -2031,7 +2018,7 @@ This order ensures that advanced functionality is built on top of a reliable fin
 
 # 54. Definition of Done
 
-PayFlow MVP is considered complete when a reviewer can:
+**MVP milestone: complete as of 2026-09-30.** The following acceptance workflow is implemented; section 55 links the repository evidence and records validation. A reviewer can:
 
 1. Clone the repository.
 2. Start PostgreSQL and the backend through Docker Compose.
@@ -2050,29 +2037,48 @@ PayFlow MVP is considered complete when a reviewer can:
 15. Build with `vp build` and serve `frontend/dist` with working SPA fallback and API forwarding; pass `vp check`, `vp test run`, and browser tests.
 16. Verify session expiry, cookie security, CSRF checks, single in-tab refresh, and current-session revocation through the MVP authentication test suite.
 17. Submit forms through TanStack Form with Zod validation and the shared Axios/TanStack Query integration; verify bounded `401` retries and that ambiguous financial failures are not automatically replayed.
+18. Open `/profile` and view the current profile from `/auth/me`.
+19. Review recipient, amount, fee, and total before explicitly confirming a transfer; edit the details without sending money. MVP transfers have no fee.
+20. Use history type/status/date filters and pagination, then verify that browser back/forward restores the controls and rows.
 
-At that point, PayFlow will provide a strong demonstration of Java Spring Boot backend engineering, full-stack development and fintech-oriented system design.
+PayFlow now provides a strong demonstration of Java Spring Boot backend engineering, full-stack development and fintech-oriented system design.
 
 ---
 
-# 55. Frontend and Authentication Transition Checklist
+# 55. MVP Milestone and Implementation Status
 
-This revision changes the target architecture and requirements; it does not claim that the application integration is already implemented.
+**Status: MVP complete — 2026-09-30.** The frontend/authentication transition and the final profile, transfer-confirmation, and browser-coverage gaps are implemented. Completion refers to the MVP scope in section 45 and acceptance workflow in section 54; it does not imply completion of Phase 2/3 features or production deployment.
 
-Repository review on 2026-09-30 found an existing React SPA scaffold with Vite+, TanStack Router, Tailwind CSS, and shadcn/ui. Spring Boot currently provides access-token-only bearer authentication and the core wallet/transaction APIs. Refresh sessions, refresh/logout endpoints, and session-bound JWT validation are not yet implemented. The frontend has no API proxy configured, and Spring Security has no explicit CORS integration or authentication-flow CSRF defense.
-
-| Area | Required implementation work |
+| Area | Completed implementation and repository evidence |
 |---|---|
-| Frontend foundation | Extend the existing scaffold; add TanStack Query, TanStack Form, Zod, Axios, and frontend test dependencies/configuration; retain Vite+, Vite, Rolldown, Vitest, Oxlint, Oxfmt, and existing task tooling. Apply the recommended shadcn theme from section 43. |
-| Routing and authentication | Implement the MVP route table, in-memory access tokens, cookie-backed session restoration, single in-tab refresh, protected layouts/route guards, logout, stale-response guards, and cache cleanup. Defer complex cross-tab coordination. |
-| API integration | Add one shared Axios instance with optional `VITE_API_BASE_URL` (default `/api/v1`), bearer/cookie/CSRF handling, centralized response/errors, controlled `401` refresh, TanStack Query integration, development `/api` proxy, and financial payload/idempotency-key lifecycle. Disable ambiguous automatic financial retries. |
-| Backend authentication | Add refresh-session/token tables through Flyway, shared JWT issuance with `sid`, refresh/logout endpoints, transactional session deadline updates, hashed reusable MVP refresh tokens, immediate revocation checks, and authentication tests. Reject pre-change access JWTs lacking a valid session. |
-| Backend security | Add cookie policy, authentication-flow CSRF checks, and configurable trusted origins/lifetimes. Add credentialed CORS/preflight tests if enabling separate-origin browser access. Preserve financial API contracts and business logic. |
-| Build and hosting | Retain Vite+ `vp` install/check/test/build commands in CI and Docker builds. Add static-server SPA fallback excluding `/api/*`, production API proxy, public environment example, and frontend CI/browser tests; add a frontend container when containerizing the UI. |
-| Documentation | Update the root README's obsolete frontend plan and access-token-only authentication description, plus the frontend README's obsolete server-function examples to reflect the React SPA. Document TanStack Form/Zod, shared Axios/TanStack Query responsibilities, session restoration, expiry/logout behavior, deferred security enhancements, cookie/CSRF settings, API examples, Vite+ commands, and deployment. |
+| Frontend foundation | React/TypeScript SPA with Vite+, TanStack Router/Query/Form, Zod, Axios, Tailwind CSS, and shadcn Nova/Zinc/Teal. Dependencies and checks: [frontend/package.json](../frontend/package.json), [frontend/vite.config.ts](../frontend/vite.config.ts). |
+| Routing and authentication | All MVP routes, including `/profile`; in-memory access tokens, cookie-backed startup restoration, single in-tab refresh, protected layout, validated return navigation, logout, stale-response guards, and private cache/intent cleanup. [Routes](../frontend/src/routes/), [session state](../frontend/src/features/auth/session.ts), [return validation](../frontend/src/features/auth/contracts.ts). |
+| API integration | Shared Axios client defaults to `/api/v1` with optional `VITE_API_BASE_URL`; bearer/cookie/CSRF handling, response/error normalization, bounded GET renewal/retry, and TanStack Query integration. Development `/api` proxy is configured. Financial mutations are never automatically replayed. [API client](../frontend/src/lib/api.ts), [operation lifecycle](../frontend/src/features/financial/use-financial-operation.ts). |
+| Backend authentication | Flyway V5 login-session/refresh-token tables, session-bound JWTs with `sid`, refresh/logout/me endpoints, hashed reusable MVP refresh tokens, transactional deadline updates, and immediate session revocation checks. [Migration](../backend/src/main/resources/db/migration/V5__create_login_sessions.sql), [session service](../backend/src/main/java/com/payflow/backend/auth/service/SessionService.java), [auth controller](../backend/src/main/java/com/payflow/backend/auth/controller/AuthController.java). |
+| Backend security | Configurable cookie policy, trusted origins/lifetimes, custom-header and Origin/Referer CSRF checks, current account/session validation, roles, and ownership checks. Same-origin browser access uses the frontend proxy; separate-origin credentialed CORS is not enabled or claimed as MVP functionality. [Security configuration](../backend/src/main/java/com/payflow/backend/config/SecurityConfig.java), [CSRF filter](../backend/src/main/java/com/payflow/backend/auth/security/AuthFlowCsrfFilter.java), [session tests](../backend/src/test/java/com/payflow/backend/auth/SessionTests.java). |
+| Financial workflow | Simulated deposits, atomic/idempotent P2P transfers, explicit recipient/amount/zero-fee/total review, wallet updates, history URL filters/pagination, owner/participant receipts, and persisted unknown-outcome recovery with explicit same-key retry. [Financial UI](../frontend/src/features/financial/), [transfer tests](../backend/src/test/java/com/payflow/backend/transfer/TransferTests.java). |
+| Build and hosting | Complete PostgreSQL/backend/frontend Compose stack; frozen-lockfile Vite+ build, Nginx SPA fallback, `/api` forwarding, and missing-asset 404s. CI runs frontend checks/unit tests/build and browser tests against the container stack. [Compose](../docker-compose.yaml), [frontend image](../frontend/Dockerfile), [Nginx](../frontend/nginx.conf), [frontend CI](../.github/workflows/frontend.yml), [backend CI](../.github/workflows/backend.yml). |
+| Documentation | Root/frontend READMEs document the SPA, session restoration/renewal/logout, cookie/CSRF configuration, financial recovery, API examples, development, container hosting, and validation commands. [Root README](../README.md), [frontend README](../frontend/README.md). |
 
-Completion is measured by section 54. The linked official documentation supports tooling and security principles; the same-origin API default, token/session lifetimes, bounded reusable MVP refresh-token policy, deferred rotation/reuse handling, immediate revocation, and phase boundaries are PayFlow design decisions. Vite+ and TanStack Router do not themselves require refresh tokens; this revision adopts refresh sessions to improve authentication continuity and session control.
+## Milestone Validation
 
+Validation recorded on 2026-09-30 for the final MVP gaps:
+
+- Frontend format, lint, and type checks passed with `vp check`.
+- All 29 frontend unit tests passed using the project-local Vite+ runner (`pnpm exec vp test run`), including transfer validation, review/edit/confirmation, and unknown-outcome retry handling.
+- Production build passed with `vp build`.
+- All 6 Playwright tests passed against the running production Nginx/container stack (`PAYFLOW_BASE_URL=http://localhost:13000 pnpm exec playwright test`). Coverage includes the two-user financial workflow, exact-payload/key retry, receipts, insufficient funds, logout/revocation, SPA/API/asset serving, profile revalidation, access-token renewal, expired-session return navigation, and history filters/pagination with back/forward. See [demo tests](../frontend/e2e/demo.spec.ts) and [session/history tests](../frontend/e2e/session-history.spec.ts).
+
+The session/history browser cases simulate expiry responses at the browser API boundary for deterministic client coverage; backend session deadline, cookie, CSRF, JWT/session ownership, and refresh/logout concurrency behavior are covered separately by [SessionTests](../backend/src/test/java/com/payflow/backend/auth/SessionTests.java). Backend suites and CI remain the source of evidence for server-side financial/authentication guarantees; the final frontend-gap validation did not rerun the backend suite.
+
+## Remaining Post-MVP Work
+
+- Phase 2 merchant accounts/payment requests, merchant-payment receipts/refunds, admin tooling, account freezing, advanced filtering/audit logs, and email notifications.
+- Phase 3 caching, messaging, observability, rate limiting, Kubernetes, and cloud deployment.
+- Security enhancements from section 47: complex cross-tab coordination, strict refresh rotation/token-family reuse detection, advanced lost-response/race recovery, session-management UI, and logout-all-devices.
+- Separate-origin browser hosting would require explicit credentialed CORS/preflight configuration and tests; the shipped MVP uses same-origin API forwarding.
+
+The bounded reusable MVP refresh-token policy is intentional. Cookie security, CSRF checks, session validation/revocation, ownership checks, and financial integrity are implemented MVP requirements, not deferred enhancements.
 
 ## Open Consistency Questions
 
