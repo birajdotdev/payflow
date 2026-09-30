@@ -19,10 +19,10 @@ public class User {
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
-    @Column(nullable = false, unique = true,  length = 255)
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(nullable = false, unique = true,  length = 20)
+    @Column(nullable = false, unique = true, length = 20)
     private String phone;
 
     @Column(name = "password_hash", nullable = false, length = 255)
@@ -60,4 +60,5 @@ public class User {
     protected void onUpdate() {
         updatedAt = Instant.now();
     }
+
 }

@@ -165,6 +165,19 @@ Conflict responses use the same message for email and phone and never identify t
 conflicting field. A 409 still reveals that the submitted combination cannot be
 registered; this is not an account-enumeration-proof signup flow.
 
+## Backend Java formatting
+
+The backend uses Spring Java Format with spaces for indentation. Maven's `validate`
+phase checks formatting, including during CI's `verify` build. From `backend/`, run:
+
+```bash
+./mvnw spring-javaformat:apply    # Format main and test Java sources
+./mvnw spring-javaformat:validate # Check formatting without changing files
+```
+
+Use explicit imports and simple type names in declarations; the formatter handles
+spacing and wrapping, while imports must be maintained separately.
+
 ## Login and access your wallet
 
 ```bash

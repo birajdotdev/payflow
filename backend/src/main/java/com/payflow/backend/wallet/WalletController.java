@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
 public class WalletController {
+
     private final WalletService walletService;
+
     private final DepositService depositService;
 
     @PostMapping("/deposit")
@@ -21,9 +23,9 @@ public class WalletController {
         return ApiResponse.of(depositService.deposit(request.amount(), key));
     }
 
-
     @GetMapping
     public ApiResponse<WalletResponse> wallet() {
         return ApiResponse.of(walletService.currentWallet());
     }
+
 }

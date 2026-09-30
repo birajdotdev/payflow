@@ -1,15 +1,5 @@
 package com.payflow.backend.auth.security;
 
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.*;
-
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,9 +8,27 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({JwtProperties.class, SessionProperties.class})
+@EnableConfigurationProperties({ JwtProperties.class, SessionProperties.class })
 public class JwtConfig {
+
     @Bean
     Clock clock() {
         return Clock.systemUTC();
@@ -31,7 +39,8 @@ public class JwtConfig {
         byte[] bytes;
         try {
             bytes = Base64.getDecoder().decode(properties.secret() == null ? "" : properties.secret());
-        } catch (IllegalArgumentException exception) {
+        }
+        catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("JWT_SECRET must be Base64-encoded random key material.");
         }
         if (bytes.length < 32) {
@@ -48,26 +57,28 @@ public class JwtConfig {
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtSigningKey, JwtProperties properties, Clock clock) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtSigningKey)
-                .macAlgorithm(MacAlgorithm.HS256).build();
+            .macAlgorithm(MacAlgorithm.HS256)
+            .build();
         JwtTimestampValidator timestamps = new JwtTimestampValidator(Duration.ZERO);
         timestamps.setClock(clock);
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                timestamps,
-                new JwtIssuerValidator(properties.issuer()),
-                new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
-                        audience -> audience != null && audience.contains(properties.audience())),
-                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
-                new JwtClaimValidator<Instant>(JwtClaimNames.IAT,
-                        issuedAt -> issuedAt != null && !issuedAt.isAfter(clock.instant())),
-                new JwtClaimValidator<String>(JwtClaimNames.SUB, JwtConfig::isUserId)));
+        decoder.setJwtValidator(
+                new DelegatingOAuth2TokenValidator<>(timestamps, new JwtIssuerValidator(properties.issuer()),
+                        new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
+                                audience -> audience != null && audience.contains(properties.audience())),
+                        new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
+                        new JwtClaimValidator<Instant>(JwtClaimNames.IAT,
+                                issuedAt -> issuedAt != null && !issuedAt.isAfter(clock.instant())),
+                        new JwtClaimValidator<String>(JwtClaimNames.SUB, JwtConfig::isUserId)));
         return decoder;
     }
 
     private static boolean isUserId(String subject) {
         try {
             return subject != null && UUID.fromString(subject).toString().equals(subject);
-        } catch (IllegalArgumentException exception) {
+        }
+        catch (IllegalArgumentException exception) {
             return false;
         }
     }
+
 }

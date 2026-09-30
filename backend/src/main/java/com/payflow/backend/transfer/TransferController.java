@@ -11,12 +11,14 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
 public class TransferController {
+
     private final TransferService transfers;
 
     @PostMapping
     @Operation(summary = "Transfer NPR to another wallet; retries return the original receipt")
     public ApiResponse<TransferResponse> transfer(@RequestBody TransferRequest request,
-                                                @RequestHeader("Idempotency-Key") String key) {
+            @RequestHeader("Idempotency-Key") String key) {
         return ApiResponse.of(transfers.transfer(request, key));
     }
+
 }

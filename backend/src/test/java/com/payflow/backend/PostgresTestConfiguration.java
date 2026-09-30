@@ -13,4 +13,5 @@ public class PostgresTestConfiguration {
     PostgreSQLContainer postgres() {
         return new PostgreSQLContainer("postgres:18.6");
     }
+
 }

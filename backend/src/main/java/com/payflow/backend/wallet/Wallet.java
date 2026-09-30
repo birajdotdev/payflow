@@ -24,12 +24,7 @@ public class Wallet {
     private UUID id;
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(
-            name = "user_id",
-            nullable = false,
-            unique = true,
-            updatable = false
-    )
+    @JoinColumn(name = "user_id", nullable = false, unique = true, updatable = false)
     private User user;
 
     @Column(nullable = false, precision = 19, scale = 2)
@@ -49,7 +44,7 @@ public class Wallet {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(name = "updated_at",  nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     public Wallet(User user) {
@@ -58,13 +53,11 @@ public class Wallet {
 
     void creditDeposit(BigDecimal amount) {
         if (status != WalletStatus.ACTIVE) {
-            throw new FinancialException(
-                    HttpStatus.CONFLICT, "WALLET_FROZEN", "Wallet is frozen.");
+            throw new FinancialException(HttpStatus.CONFLICT, "WALLET_FROZEN", "Wallet is frozen.");
         }
         BigDecimal updated = balance.add(amount);
         if (updated.compareTo(DepositService.MAX_BALANCE) > 0) {
-            throw new FinancialException(
-                    HttpStatus.CONFLICT, "BALANCE_LIMIT_EXCEEDED",
+            throw new FinancialException(HttpStatus.CONFLICT, "BALANCE_LIMIT_EXCEEDED",
                     "Simulated wallet balance cannot exceed NPR 1000000.00.");
         }
         balance = updated;
@@ -72,7 +65,8 @@ public class Wallet {
 
     public void transferTo(Wallet receiver, BigDecimal amount) {
         if (id.equals(receiver.id)) {
-            throw new FinancialException(HttpStatus.BAD_REQUEST, "SELF_TRANSFER", "Cannot transfer to the same wallet.");
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "SELF_TRANSFER",
+                    "Cannot transfer to the same wallet.");
         }
         if (amount == null || amount.signum() <= 0 || amount.scale() > 2) {
             throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Invalid transfer amount.");
@@ -98,4 +92,5 @@ public class Wallet {
     public void onUpdate() {
         updatedAt = Instant.now();
     }
+
 }

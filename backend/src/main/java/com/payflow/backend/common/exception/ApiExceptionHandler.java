@@ -19,65 +19,65 @@ import java.util.Set;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
-    private static final Set<String> REGISTRATION_CONSTRAINTS = Set.of(
-            "users_email_key", "users_email_normalized_key", "users_phone_key");
+
+    private static final Set<String> REGISTRATION_CONSTRAINTS = Set.of("users_email_key", "users_email_normalized_key",
+            "users_phone_key");
 
     @ExceptionHandler(FinancialException.class)
     ResponseEntity<ApiError> handleFinancial(FinancialException exception) {
         return ResponseEntity.status(exception.getStatus())
-                .body(ApiError.of(exception.getCode(), exception.getMessage()));
+            .body(ApiError.of(exception.getCode(), exception.getMessage()));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
     ResponseEntity<ApiError> handleBadCredentials(BadCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiError.of("INVALID_CREDENTIALS", "Invalid email or password."));
+            .body(ApiError.of("INVALID_CREDENTIALS", "Invalid email or password."));
     }
 
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiError> handleAuthentication(AuthenticationException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
-                .body(ApiError.of("UNAUTHORIZED", "Authentication is required."));
+            .header(HttpHeaders.WWW_AUTHENTICATE, "Bearer")
+            .body(ApiError.of("UNAUTHORIZED", "Authentication is required."));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException exception) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiError.of("FORBIDDEN", "Access is denied."));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.of("FORBIDDEN", "Access is denied."));
     }
 
     @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
     ResponseEntity<ApiError> handleValidation(jakarta.validation.ConstraintViolationException exception) {
-        return ResponseEntity.badRequest()
-                .body(ApiError.of("INVALID_REQUEST", "The request could not be processed."));
+        return ResponseEntity.badRequest().body(ApiError.of("INVALID_REQUEST", "The request could not be processed."));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> handleIntegrityViolation(DataIntegrityViolationException exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof ConstraintViolationException violation
-                    && violation.getConstraintName() != null
+            if (cause instanceof ConstraintViolationException violation && violation.getConstraintName() != null
                     && REGISTRATION_CONSTRAINTS.contains(violation.getConstraintName())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(ApiError.of("REGISTRATION_CONFLICT", "Unable to register with the supplied details."));
+                    .body(ApiError.of("REGISTRATION_CONFLICT", "Unable to register with the supplied details."));
             }
         }
         return handleUnexpected(exception);
     }
 
     @Override
-    protected ResponseEntity<Object> handleExceptionInternal(Exception exception, Object body,
-            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        return new ResponseEntity<>(ApiError.of("INVALID_REQUEST", "The request could not be processed."),
-                headers, status);
+    protected ResponseEntity<Object> handleExceptionInternal(Exception exception, Object body, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        return new ResponseEntity<>(ApiError.of("INVALID_REQUEST", "The request could not be processed."), headers,
+                status);
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(Exception exception) {
-        // Do not log exception messages: database/validation errors can contain personal data.
+        // Do not log exception messages: database/validation errors can contain personal
+        // data.
         logger.error("Request failed: " + exception.getClass().getSimpleName());
         return ResponseEntity.internalServerError()
-                .body(ApiError.of("INTERNAL_ERROR", "An unexpected error occurred."));
+            .body(ApiError.of("INTERNAL_ERROR", "An unexpected error occurred."));
     }
+
 }

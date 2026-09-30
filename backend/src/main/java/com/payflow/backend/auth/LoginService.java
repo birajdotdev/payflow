@@ -1,5 +1,7 @@
 package com.payflow.backend.auth;
 
+import java.util.UUID;
+
 import com.payflow.backend.auth.dto.LoginRequest;
 import com.payflow.backend.user.User;
 import com.payflow.backend.user.UserRepository;
@@ -10,14 +12,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.validation.annotation.Validated;
 
-import java.util.UUID;
-
 @Service
 @Validated
 public class LoginService {
+
     private final UserRepository users;
+
     private final PasswordEncoder passwords;
+
     private final String dummyPasswordHash;
+
     private final SessionService sessions;
 
     public LoginService(UserRepository users, PasswordEncoder passwords, SessionService sessions) {
@@ -37,4 +41,5 @@ public class LoginService {
         }
         return sessions.create(user);
     }
+
 }
