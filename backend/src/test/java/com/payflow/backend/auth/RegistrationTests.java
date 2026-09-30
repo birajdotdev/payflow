@@ -1,13 +1,21 @@
 package com.payflow.backend.auth;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
+
 import com.payflow.backend.PostgresTestConfiguration;
-import com.payflow.backend.user.User;
-import com.payflow.backend.user.UserRepository;
-import com.payflow.backend.user.UserRole;
-import com.payflow.backend.user.UserStatus;
-import com.payflow.backend.wallet.Wallet;
-import com.payflow.backend.wallet.WalletRepository;
-import com.payflow.backend.wallet.WalletStatus;
+import com.payflow.backend.user.entity.User;
+import com.payflow.backend.user.entity.UserRole;
+import com.payflow.backend.user.entity.UserStatus;
+import com.payflow.backend.user.repository.UserRepository;
+import com.payflow.backend.wallet.entity.Wallet;
+import com.payflow.backend.wallet.entity.WalletStatus;
+import com.payflow.backend.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,21 +28,13 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,15 +46,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Import(PostgresTestConfiguration.class)
 class RegistrationTests {
+
     private static final String PASSWORD = "Demo-password-123";
+
     private static final String REGISTER = "/api/v1/auth/register";
 
-    @Autowired MockMvc mvc;
-    @Autowired ObjectMapper json;
-    @Autowired UserRepository users;
-    @Autowired WalletRepository wallets;
-    @Autowired PasswordEncoder passwordEncoder;
-    @Autowired JdbcTemplate jdbc;
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    ObjectMapper json;
+
+    @Autowired
+    UserRepository users;
+
+    @Autowired
+    WalletRepository wallets;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     @BeforeEach
     void clearIsolatedDatabase() {
@@ -67,17 +80,18 @@ class RegistrationTests {
         body.put("fullName", "  Demo User  ");
         body.put("email", "  DEMO@Example.com  ");
         body.put("phone", "  +9779812345678  ");
-        String response = register(body)
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data.fullName").value("Demo User"))
-                .andExpect(jsonPath("$.data.email").value("demo@example.com"))
-                .andExpect(jsonPath("$.data.phone").value("+9779812345678"))
-                .andExpect(jsonPath("$.data.role").value("USER"))
-                .andExpect(jsonPath("$.data.password").doesNotExist())
-                .andExpect(jsonPath("$.data.passwordHash").doesNotExist())
-                .andReturn().getResponse().getContentAsString();
+        String response = register(body).andExpect(status().isCreated())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.timestamp").isNotEmpty())
+            .andExpect(jsonPath("$.data.fullName").value("Demo User"))
+            .andExpect(jsonPath("$.data.email").value("demo@example.com"))
+            .andExpect(jsonPath("$.data.phone").value("+9779812345678"))
+            .andExpect(jsonPath("$.data.role").value("USER"))
+            .andExpect(jsonPath("$.data.password").doesNotExist())
+            .andExpect(jsonPath("$.data.passwordHash").doesNotExist())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
 
         assertThat(users.count()).isEqualTo(1);
         assertThat(wallets.count()).isEqualTo(1);
@@ -142,7 +156,7 @@ class RegistrationTests {
                 return register(body).andReturn().getResponse().getStatus();
             });
             assertThat(List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder(201, 409);
+                .containsExactlyInAnyOrder(201, 409);
         }
         assertThat(users.count()).isEqualTo(1);
         assertThat(wallets.count()).isEqualTo(1);
@@ -167,17 +181,17 @@ class RegistrationTests {
             Map<String, Object> body = validRequest();
             body.put("email", "rollback@example.com");
             body.put("phone", "+9779812345679");
-            register(body)
-                    .andExpect(status().isInternalServerError())
-                    .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
-                    .andExpect(content().string(org.hamcrest.Matchers.not(
-                            org.hamcrest.Matchers.containsString("Injected"))));
+            register(body).andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Injected"))));
 
             assertThat(users.findByEmail("rollback@example.com")).isEmpty();
             assertThat(users.count()).isEqualTo(1);
             assertThat(wallets.count()).isEqualTo(1);
             assertThat(wallets.findByUser_Id(existing.getId())).isPresent();
-        } finally {
+        }
+        finally {
             jdbc.execute("DROP TRIGGER IF EXISTS reject_test_wallet ON wallets");
             jdbc.execute("DROP FUNCTION reject_test_wallet()");
         }
@@ -188,33 +202,22 @@ class RegistrationTests {
     void invalidInputReturns400WithoutWritingAnyData(String field, Object value) throws Exception {
         Map<String, Object> body = validRequest();
         body.put(field, value);
-        register(body)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        register(body).andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+            .andExpect(jsonPath("$.timestamp").isNotEmpty());
         assertThat(users.count()).isZero();
         assertThat(wallets.count()).isZero();
     }
 
     static Stream<Arguments> invalidFields() {
-        return Stream.of(
-                Arguments.of("fullName", null),
-                Arguments.of("fullName", "   "),
-                Arguments.of("fullName", "x".repeat(101)),
-                Arguments.of("email", null),
-                Arguments.of("email", "invalid"),
-                Arguments.of("email", "x".repeat(250) + "@example.com"),
-                Arguments.of("phone", null),
-                Arguments.of("phone", "9812345678"),
-                Arguments.of("phone", "+0123456789"),
-                Arguments.of("phone", "+977-9812345678"),
-                Arguments.of("phone", "+1234567890123456"),
-                Arguments.of("password", null),
-                Arguments.of("password", "       "),
-                Arguments.of("password", "short"),
-                Arguments.of("password", "x".repeat(73)),
-                Arguments.of("password", "€".repeat(25)));
+        return Stream.of(Arguments.of("fullName", null), Arguments.of("fullName", "   "),
+                Arguments.of("fullName", "x".repeat(101)), Arguments.of("email", null),
+                Arguments.of("email", "invalid"), Arguments.of("email", "x".repeat(250) + "@example.com"),
+                Arguments.of("phone", null), Arguments.of("phone", "9812345678"), Arguments.of("phone", "+0123456789"),
+                Arguments.of("phone", "+977-9812345678"), Arguments.of("phone", "+1234567890123456"),
+                Arguments.of("password", null), Arguments.of("password", "       "), Arguments.of("password", "short"),
+                Arguments.of("password", "x".repeat(73)), Arguments.of("password", "€".repeat(25)));
     }
 
     @ParameterizedTest
@@ -224,7 +227,8 @@ class RegistrationTests {
         body.put("password", password);
         register(body).andExpect(status().isCreated());
         assertThat(passwordEncoder.matches(password,
-                users.findByEmail("demo@example.com").orElseThrow().getPasswordHash())).isTrue();
+                users.findByEmail("demo@example.com").orElseThrow().getPasswordHash()))
+            .isTrue();
     }
 
     static Stream<String> boundaryPasswords() {
@@ -243,39 +247,43 @@ class RegistrationTests {
 
     @Test
     void malformedJsonReturnsSafe400() throws Exception {
-        mvc.perform(post(REGISTER).contentType(MediaType.APPLICATION_JSON).content("{\"password\":"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mvc.perform(post(REGISTER).header("X-PayFlow-CSRF", "1")
+            .header("Origin", "https://localhost")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"password\":"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         assertThat(users.count()).isZero();
     }
 
     @Test
     void otherApiRoutesRemainClosed() throws Exception {
         mvc.perform(get("/api/v1/wallet"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
     void openApiDocumentsRegistration() throws Exception {
         mvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post").exists());
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post").exists());
     }
 
     private void assertConflict(Map<String, Object> request) throws Exception {
-        register(request)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.code").value("REGISTRATION_CONFLICT"))
-                .andExpect(jsonPath("$.message").value("Unable to register with the supplied details."));
+        register(request).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("REGISTRATION_CONFLICT"))
+            .andExpect(jsonPath("$.message").value("Unable to register with the supplied details."));
         assertThat(users.count()).isEqualTo(1);
         assertThat(wallets.count()).isEqualTo(1);
     }
 
     private ResultActions register(Map<String, Object> request) throws Exception {
-        return mvc.perform(post(REGISTER).contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(request)));
+        return mvc.perform(post(REGISTER).header("X-PayFlow-CSRF", "1")
+            .header("Origin", "https://localhost")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(request)));
     }
 
     private static Map<String, Object> validRequest() {
@@ -286,4 +294,5 @@ class RegistrationTests {
         body.put("password", PASSWORD);
         return body;
     }
+
 }

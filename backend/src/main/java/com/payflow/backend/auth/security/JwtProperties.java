@@ -1,8 +1,8 @@
 package com.payflow.backend.auth.security;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.time.Duration;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("payflow.jwt")
 public record JwtProperties(String secret, String issuer, String audience, Duration accessTokenTtl) {
@@ -12,7 +12,8 @@ public record JwtProperties(String secret, String issuer, String audience, Durat
         }
         if (accessTokenTtl == null || accessTokenTtl.compareTo(Duration.ofSeconds(1)) < 0
                 || accessTokenTtl.compareTo(Duration.ofHours(1)) > 0 || accessTokenTtl.getNano() != 0) {
-            throw new IllegalArgumentException("JWT access token TTL must be whole seconds between 1 second and 1 hour.");
+            throw new IllegalArgumentException(
+                    "JWT access token TTL must be whole seconds between 1 second and 1 hour.");
         }
     }
 

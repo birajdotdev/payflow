@@ -28,10 +28,9 @@ Implemented:
 - GitHub Actions builds, tests, and packages the backend.
 
 The frontend scaffold has a landing page; wallet workflows and API integration are
-not implemented yet. The backend currently uses access-token-only authentication;
-refresh sessions and logout are planned in the PRD. Register through the API first,
+not implemented yet. The backend uses session-bound access JWTs and HttpOnly refresh cookies. Register through the API first,
 then log in to receive an access token. API routes outside registration, login,
-current user/wallet, deposits, transfers, transaction history/details, and API
+refresh/logout, current user/wallet, deposits, transfers, transaction history/details, and API
 documentation are denied.
 
 See the [PRD](docs/PRD.md) for the intended product scope.
@@ -114,6 +113,8 @@ tests, and static build/hosting requirements.
 ```bash
 curl -i http://localhost:8080/api/v1/auth/register \
   -H 'Content-Type: application/json' \
+  -H 'X-PayFlow-CSRF: 1' \
+  -H 'Origin: https://localhost' \
   -d '{
     "fullName": "Demo User",
     "email": "demo@example.com",
@@ -164,11 +165,38 @@ Conflict responses use the same message for email and phone and never identify t
 conflicting field. A 409 still reveals that the submitted combination cannot be
 registered; this is not an account-enumeration-proof signup flow.
 
+## Backend package organization
+
+Java code under `com.payflow.backend` is grouped by business feature (`auth`, `user`,
+`wallet`, `transfer`, `transaction`). Each feature uses `controller`, `service`,
+`repository`, `entity`, and `dto` subpackages where needed. Entities and their domain
+enums live together; authentication-specific security and validation remain under
+`auth.security` and `auth.validation`. Application-wide configuration lives in
+`config`, with shared errors and response envelopes in `common`.
+
+See [PRD section 31](docs/PRD.md#31-backend-architecture) for the package tree and
+responsibilities. Feature integration tests stay grouped by feature.
+
+## Backend Java formatting
+
+The backend uses Spring Java Format with spaces for indentation. Maven's `validate`
+phase checks formatting, including during CI's `verify` build. From `backend/`, run:
+
+```bash
+./mvnw spring-javaformat:apply    # Format main and test Java sources
+./mvnw spring-javaformat:validate # Check formatting without changing files
+```
+
+Use explicit imports and simple type names in declarations; the formatter handles
+spacing and wrapping, while imports must be maintained separately.
+
 ## Login and access your wallet
 
 ```bash
 curl -sS http://localhost:8080/api/v1/auth/login \
   -H 'Content-Type: application/json' \
+  -H 'X-PayFlow-CSRF: 1' \
+  -H 'Origin: https://localhost' \
   -d '{"email":"demo@example.com","password":"Demo-password-123"}'
 ```
 
@@ -198,15 +226,34 @@ readable. Account suspension prevents both login and subsequent use of issued to
 Swagger's **Authorize** button accepts the access token and attaches the bearer
 header to protected operations.
 
-Tokens use HS256 and contain a user UUID, issuer, audience, issuance/not-before/
+Tokens use HS256 and contain a user UUID, session ID (`sid`), issuer, audience, issuance/not-before/
 expiry times, a unique token ID, and the role at issuance. The decoder requires a
 valid signature, the configured issuer/audience, a UUID subject, and valid timestamps,
 with no expiry grace period. Authorization uses the current database role instead of
 trusting the role snapshot in a token. Passwords and contact details are not JWT claims.
 
-The API is stateless: it does not authenticate with cookies or HTTP sessions, and
-tokens in query parameters are not accepted. Refresh tokens and server-side logout
-are not implemented; log in again after expiry. Changing `JWT_SECRET` invalidates
+Business APIs require bearer tokens. Each JWT has a `sid`; every request checks the
+session owner, deadlines, revocation and current account status/role in PostgreSQL.
+Login creates a session and a 256-bit opaque token whose SHA-256 hash alone is stored.
+`POST /api/v1/auth/refresh` restores access without a JWT and retains the same refresh
+token. `POST /api/v1/auth/logout` revokes that session and clears its cookie, returning
+`data: null`; subsequent access JWT checks reject the revoked session. Both accept no
+body. Invalid refresh returns `401 UNAUTHORIZED` and clears the cookie.
+
+All four authentication POST endpoints require `X-PayFlow-CSRF: 1` and an exact trusted
+`Origin`, with parsed `Referer` origin fallback. Login/register require JSON. CSRF
+failure returns `403 FORBIDDEN` before session changes. Business endpoints reject cookie-only
+authentication. Authentication responses use `Cache-Control: no-store`.
+
+Configure `SESSION_TRUSTED_ORIGINS` as comma-separated exact frontend origins (default
+`https://localhost`), `SESSION_ABSOLUTE_TTL` (default `7d`), and `SESSION_IDLE_TTL`
+(default `24h`). Refresh renews inactivity but never the absolute deadline; JWT expiry
+is capped by the session deadline. Ordinary API requests do not renew sessions.
+The host-only `payflow_refresh` cookie uses HttpOnly, Secure, SameSite=Strict and
+Path=/api/v1/auth. For HTTP local development only, set `SESSION_COOKIE_SECURE=false`
+and configure localhost/loopback trusted origins. Production must use secure cookies.
+The default deployment is same-origin; separate-origin credentialed CORS is not enabled.
+Strict rotation/reuse detection and cross-tab coordination remain deferred. Changing `JWT_SECRET` invalidates
 all existing tokens. Keep the same key across restarts when tokens should remain valid.
 
 ## Add simulated funds
@@ -466,8 +513,26 @@ Deposits add pessimistic row locking as described above.
 Next milestones:
 
 1. React SPA workflows for registration, login, funding, transfers, and history,
-   with TanStack Query/Form, Zod, Axios, and backend refresh sessions as specified
+   with TanStack Query/Form, Zod, Axios, and session restoration as specified
    in the PRD.
 2. Backend container and complete Compose setup.
 
 Merchant payments, refunds, admin tooling, and cloud deployment follow the stable MVP.
+
+Authentication cookie examples (use HTTPS and the trusted frontend origin configured above):
+
+```bash
+# Save the login refresh cookie without exposing its value in JSON.
+curl -sS -c payflow-cookies.txt https://localhost/api/v1/auth/login \
+  -H 'Origin: https://localhost' -H 'X-PayFlow-CSRF: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"Demo-password-123"}'
+curl -sS -b payflow-cookies.txt -c payflow-cookies.txt -X POST \
+  https://localhost/api/v1/auth/refresh \
+  -H 'Origin: https://localhost' -H 'X-PayFlow-CSRF: 1'
+curl -sS -b payflow-cookies.txt -c payflow-cookies.txt -X POST \
+  https://localhost/api/v1/auth/logout \
+  -H 'Origin: https://localhost' -H 'X-PayFlow-CSRF: 1'
+```
+
+Treat the local cookie jar as a credential and remove it after use.

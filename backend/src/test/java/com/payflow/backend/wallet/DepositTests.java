@@ -1,5 +1,13 @@
 package com.payflow.backend.wallet;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import com.payflow.backend.PostgresTestConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,14 +25,6 @@ import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -34,10 +34,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Import(PostgresTestConfiguration.class)
 class DepositTests {
+
     private static final String URL = "/api/v1/wallet/deposit";
-    @Autowired MockMvc mvc;
-    @Autowired ObjectMapper json;
-    @Autowired JdbcTemplate jdbc;
+
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    ObjectMapper json;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
     private String token;
 
     @BeforeEach
@@ -49,22 +57,21 @@ class DepositTests {
     @Test
     void thousandRupeeDepositAndRetriesProduceExactlyOneRecordAndStableReceipt() throws Exception {
         var original = receipt(deposit(token, "1000", "demo-1000").andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.amount").value(1000))
-                .andExpect(jsonPath("$.data.balanceAfter").value(1000))
-                .andExpect(jsonPath("$.data.currency").value("NPR"))
-                .andExpect(jsonPath("$.data.type").value("DEPOSIT"))
-                .andExpect(jsonPath("$.data.status").value("SUCCESS")));
+            .andExpect(jsonPath("$.data.amount").value(1000))
+            .andExpect(jsonPath("$.data.balanceAfter").value(1000))
+            .andExpect(jsonPath("$.data.currency").value("NPR"))
+            .andExpect(jsonPath("$.data.type").value("DEPOSIT"))
+            .andExpect(jsonPath("$.data.status").value("SUCCESS")));
         assertThat(original.path("reference").asText()).matches("PF-\\d{4}-[a-f0-9-]{36}");
-        for (String amount : new String[]{"1000.00", "1000", "1000.0"}) {
-            assertThat(receipt(deposit(token, amount, "demo-1000").andExpect(status().isOk())))
-                    .isEqualTo(original);
+        for (String amount : new String[] { "1000.00", "1000", "1000.0" }) {
+            assertThat(receipt(deposit(token, amount, "demo-1000").andExpect(status().isOk()))).isEqualTo(original);
         }
         assertState("1000", 1);
         mvc.perform(get("/api/v1/wallet").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.balance").value(1000));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.balance").value(1000));
         deposit(token, "50", "another").andExpect(status().isOk());
-        assertThat(receipt(deposit(token, "1000", "demo-1000").andExpect(status().isOk())))
-                .isEqualTo(original);
+        assertThat(receipt(deposit(token, "1000", "demo-1000").andExpect(status().isOk()))).isEqualTo(original);
         assertState("1050", 2);
     }
 
@@ -72,7 +79,7 @@ class DepositTests {
     void sameKeyWithDifferentAmountConflicts() throws Exception {
         deposit(token, "1000", "same").andExpect(status().isOk());
         deposit(token, "999", "same").andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
+            .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
         assertState("1000", 1);
     }
 
@@ -81,21 +88,24 @@ class DepositTests {
         String other = account("bob@example.com", "+9779812345679");
         deposit(token, "1000", "shared").andExpect(status().isOk());
         mvc.perform(post(URL).header("Authorization", "Bearer " + other)
-                        .header("Idempotency-Key", "shared").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":20,\"walletId\":\"ignored\",\"currency\":\"USD\",\"balance\":99999}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.currency").value("NPR"));
+            .header("Idempotency-Key", "shared")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"amount\":20,\"walletId\":\"ignored\",\"currency\":\"USD\",\"balance\":99999}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.currency").value("NPR"));
         mvc.perform(get("/api/v1/wallet").header("Authorization", "Bearer " + token))
-                .andExpect(jsonPath("$.data.balance").value(1000));
+            .andExpect(jsonPath("$.data.balance").value(1000));
         mvc.perform(get("/api/v1/wallet").header("Authorization", "Bearer " + other))
-                .andExpect(jsonPath("$.data.balance").value(20));
+            .andExpect(jsonPath("$.data.balance").value(20));
         assertThat(jdbc.queryForObject("SELECT count(DISTINCT reference) FROM transactions", Long.class)).isEqualTo(2);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"null", "0", "-1", "0.001", "1.001", "1.000", "100000.01", "1000000000000000000", "1e100", "1e-100", "\"no\"", "true", "{}"})
+    @ValueSource(strings = { "null", "0", "-1", "0.001", "1.001", "1.000", "100000.01", "1000000000000000000", "1e100",
+            "1e-100", "\"no\"", "true", "{}" })
     void rejectsInvalidAmountsWithoutWrites(String amount) throws Exception {
         deposit(token, amount, "invalid").andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         assertState("0", 0);
     }
 
@@ -108,25 +118,26 @@ class DepositTests {
 
     @Test
     void rejectsMissingAndInvalidKeysAndMalformedBodies() throws Exception {
-        for (String key : new String[]{"", " ", "has space", "x".repeat(129), "bad/key"}) {
+        for (String key : new String[] { "", " ", "has space", "x".repeat(129), "bad/key" }) {
             deposit(token, "1000", key).andExpect(status().isBadRequest());
         }
         mvc.perform(post(URL).header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":1000}"))
-                .andExpect(status().isBadRequest());
-        for (String body : new String[]{"{}", "null", "{", ""}) {
-            mvc.perform(post(URL).header("Authorization", "Bearer " + token).header("Idempotency-Key", "valid")
-                            .contentType(MediaType.APPLICATION_JSON).content(body))
-                    .andExpect(status().isBadRequest());
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"amount\":1000}")).andExpect(status().isBadRequest());
+        for (String body : new String[] { "{}", "null", "{", "" }) {
+            mvc.perform(post(URL).header("Authorization", "Bearer " + token)
+                .header("Idempotency-Key", "valid")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isBadRequest());
         }
         assertState("0", 0);
     }
 
     @Test
     void rejectsUnauthenticatedAndSuspendedUsers() throws Exception {
-        mvc.perform(post(URL).header("Idempotency-Key", "key").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":1000}"))
-                .andExpect(status().isUnauthorized());
+        mvc.perform(post(URL).header("Idempotency-Key", "key")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"amount\":1000}")).andExpect(status().isUnauthorized());
         jdbc.update("UPDATE users SET status = 'SUSPENDED'");
         deposit(token, "1000", "key").andExpect(status().isUnauthorized());
         assertState("0", 0);
@@ -137,7 +148,7 @@ class DepositTests {
         var original = receipt(deposit(token, "1000", "original").andExpect(status().isOk()));
         jdbc.update("UPDATE wallets SET status = 'FROZEN', version = version + 1");
         deposit(token, "50", "new").andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("WALLET_FROZEN"));
+            .andExpect(jsonPath("$.code").value("WALLET_FROZEN"));
         assertThat(receipt(deposit(token, "1000", "original").andExpect(status().isOk()))).isEqualTo(original);
         assertState("1000", 1);
         jdbc.update("UPDATE wallets SET status = 'ACTIVE', version = version + 1");
@@ -163,13 +174,19 @@ class DepositTests {
     void concurrentDifferentAmountsForOneKeyHaveOneWinner() throws Exception {
         var barrier = new CyclicBarrier(2);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> { barrier.await(10, TimeUnit.SECONDS); return deposit(token, "1000", "race").andReturn().getResponse().getStatus(); });
-            var second = executor.submit(() -> { barrier.await(10, TimeUnit.SECONDS); return deposit(token, "2000", "race").andReturn().getResponse().getStatus(); });
+            var first = executor.submit(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                return deposit(token, "1000", "race").andReturn().getResponse().getStatus();
+            });
+            var second = executor.submit(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                return deposit(token, "2000", "race").andReturn().getResponse().getStatus();
+            });
             assertThat(java.util.List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder(200, 409);
+                .containsExactlyInAnyOrder(200, 409);
         }
         assertThat(jdbc.queryForObject("SELECT balance FROM wallets", BigDecimal.class))
-                .isEqualByComparingTo(jdbc.queryForObject("SELECT amount FROM transactions", BigDecimal.class));
+            .isEqualByComparingTo(jdbc.queryForObject("SELECT amount FROM transactions", BigDecimal.class));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM transactions", Long.class)).isEqualTo(1);
     }
 
@@ -178,13 +195,19 @@ class DepositTests {
         concurrentDeposits(false, "100000", 9);
         var barrier = new CyclicBarrier(2);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> { barrier.await(10, TimeUnit.SECONDS); return deposit(token, "100000", "last-a").andReturn().getResponse().getStatus(); });
-            var second = executor.submit(() -> { barrier.await(10, TimeUnit.SECONDS); return deposit(token, "100000", "last-b").andReturn().getResponse().getStatus(); });
+            var first = executor.submit(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                return deposit(token, "100000", "last-a").andReturn().getResponse().getStatus();
+            });
+            var second = executor.submit(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                return deposit(token, "100000", "last-b").andReturn().getResponse().getStatus();
+            });
             assertThat(java.util.List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS)))
-                    .containsExactlyInAnyOrder(200, 409);
+                .containsExactlyInAnyOrder(200, 409);
         }
         deposit(token, "0.01", "overflow").andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("BALANCE_LIMIT_EXCEEDED"));
+            .andExpect(jsonPath("$.code").value("BALANCE_LIMIT_EXCEEDED"));
         assertState("1000000", 10);
     }
 
@@ -197,12 +220,14 @@ class DepositTests {
                 BEGIN RAISE EXCEPTION 'Injected transaction insert failure'; END; $$
                 """);
         try {
-            jdbc.execute("CREATE TRIGGER reject_test_deposit BEFORE INSERT ON transactions FOR EACH ROW EXECUTE FUNCTION reject_test_deposit()");
+            jdbc.execute(
+                    "CREATE TRIGGER reject_test_deposit BEFORE INSERT ON transactions FOR EACH ROW EXECUTE FUNCTION reject_test_deposit()");
             deposit(token, "1000", "retry").andExpect(status().isInternalServerError())
-                    .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
             assertState("25", 1);
             assertThat(jdbc.queryForMap("SELECT balance, version, updated_at FROM wallets")).isEqualTo(before);
-        } finally {
+        }
+        finally {
             jdbc.execute("DROP TRIGGER IF EXISTS reject_test_deposit ON transactions");
             jdbc.execute("DROP FUNCTION reject_test_deposit()");
         }
@@ -213,10 +238,11 @@ class DepositTests {
 
     @Test
     void openApiDocumentsAuthenticatedDepositAndRequiredKey() throws Exception {
-        mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.security[0].bearerAuth").exists())
-                .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.parameters[0].name").value("Idempotency-Key"))
-                .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.parameters[0].required").value(true));
+        mvc.perform(get("/v3/api-docs"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.security[0].bearerAuth").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.parameters[0].name").value("Idempotency-Key"))
+            .andExpect(jsonPath("$.paths['/api/v1/wallet/deposit'].post.parameters[0].required").value(true));
     }
 
     private java.util.List<JsonNode> concurrentDeposits(boolean sameKey, String amount, int count) throws Exception {
@@ -231,7 +257,8 @@ class DepositTests {
                     return receipt(deposit(token, amount, key).andExpect(status().isOk()));
                 }));
             }
-            for (var future : futures) receipts.add(future.get(30, TimeUnit.SECONDS));
+            for (var future : futures)
+                receipts.add(future.get(30, TimeUnit.SECONDS));
         }
         return receipts;
     }
@@ -246,17 +273,25 @@ class DepositTests {
     }
 
     private ResultActions deposit(String bearer, String amount, String key) throws Exception {
-        return mvc.perform(post(URL).header("Authorization", "Bearer " + bearer).header("Idempotency-Key", key)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":" + amount + "}"));
+        return mvc.perform(post(URL).header("Authorization", "Bearer " + bearer)
+            .header("Idempotency-Key", key)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"amount\":" + amount + "}"));
     }
 
     private String account(String email, String phone) throws Exception {
-        mvc.perform(post("/api/v1/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("fullName", "Demo User", "email", email,
-                                "phone", phone, "password", "Demo-password-123"))))
-                .andExpect(status().isCreated());
-        return receipt(mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("email", email, "password", "Demo-password-123"))))
-                .andExpect(status().isOk())).path("accessToken").asText();
+        mvc.perform(post("/api/v1/auth/register").header("X-PayFlow-CSRF", "1")
+            .header("Origin", "https://localhost")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(
+                    Map.of("fullName", "Demo User", "email", email, "phone", phone, "password", "Demo-password-123"))))
+            .andExpect(status().isCreated());
+        return receipt(mvc
+            .perform(post("/api/v1/auth/login").header("X-PayFlow-CSRF", "1")
+                .header("Origin", "https://localhost")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("email", email, "password", "Demo-password-123"))))
+            .andExpect(status().isOk())).path("accessToken").asText();
     }
+
 }
