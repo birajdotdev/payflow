@@ -33,6 +33,7 @@ export function DataTable({
   onPaginationChange,
   showPagination = false,
   fetching = false,
+  filtered = false,
 }: {
   data?: Transaction[]
   walletId?: string
@@ -41,6 +42,7 @@ export function DataTable({
   pagination?: PaginationState
   onPaginationChange?: OnChangeFn<PaginationState>
   showPagination?: boolean
+  filtered?: boolean
   fetching?: boolean
 }) {
   const columns = useMemo(
@@ -165,10 +167,13 @@ export function DataTable({
             <EmptyMedia variant="icon">
               <ReceiptText />
             </EmptyMedia>
-            <EmptyTitle>No transactions yet</EmptyTitle>
+            <EmptyTitle>
+              {filtered ? 'No matching transactions' : 'No transactions yet'}
+            </EmptyTitle>
             <EmptyDescription>
-              Your deposits and transfers will appear here. If filters are
-              applied, try a different view.
+              {filtered
+                ? 'Try adjusting or clearing your filters.'
+                : 'Your wallet activity will appear here.'}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

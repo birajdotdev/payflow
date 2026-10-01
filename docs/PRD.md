@@ -619,6 +619,9 @@ status
 type
 fromDate
 toDate
+minAmount
+maxAmount
+counterpartyWalletId
 page
 size
 ```
@@ -776,7 +779,7 @@ Suspension rejects login with the generic credential error, revokes every sessio
 
 Financial operations hold wallet locks in UUID order through commit. Administrative state changes lock the target's primary wallet before changing its account or wallet state. Whichever operation obtains that wallet lock first determines the outcome: a financial operation may commit before suspension/freezing, otherwise it rechecks availability and rejects. This does not undo committed operations. Session creation also locks/rechecks the account so a concurrent login cannot create a live session after suspension. Administrator state changes share a transaction-scoped PostgreSQL advisory lock, recheck the actor's current role/state, prohibit self-suspension, and preserve at least one ACTIVE ADMIN. Opposing administrator suspensions cannot lock out the platform. Local provisioning uses an explicit operator-only command for an existing active USER; public signup always assigns USER.
 
-Confirmation dialogs identify the target by name/email and UUID, desired action, reason and consequences. Server authorization is authoritative. Advanced filtering, email notifications, aggregation dashboards, and unrelated Phase 2 features remain deferred.
+Confirmation dialogs identify the target by name/email and UUID, desired action, reason and consequences. Server authorization is authoritative. Advanced admin filtering, email notifications, aggregation dashboards, and unrelated Phase 2 features remain deferred. User transaction amount/counterparty filtering is defined in section 58.
 
 ---
 
@@ -1809,7 +1812,7 @@ Everything beyond this is secondary.
 
 Implemented after the MVP: merchant accounts, merchant payment requests, shared payment/refund receipts, full refunds, paginated admin account/wallet tooling, account suspension/reactivation, wallet freezing/unfreezing, and atomic administrative status audits.
 
-Deferred: aggregate admin dashboard, advanced transaction filtering, broader activity audit logs, and email notifications.
+Implemented: focused transaction amount ranges and exact counterparty wallet filtering (section 58). Deferred: aggregate admin dashboard, broader activity audit logs, and email notifications.
 
 ---
 
@@ -2095,3 +2098,35 @@ Full merchant refunds are implemented with Flyway V7, immutable original payment
 The focused administration/freezing slice is implemented. Backend formatter and `./mvnw verify` passed **210 tests**, including **29 PostgreSQL admin cases** covering authorization, pagination/privacy, irreversible session revocation, independent status transitions/no-ops, self/last-admin safeguards, duplicate/opposing admin races, unavailable financial participants, committed receipt recovery, shared wallet-lock ordering, and injected audit failure rollback. Real PostgreSQL advisory gates pause operations after wallet flush or before audit insertion to prove both financial-first and freeze/suspension-first outcomes. An already-authenticated deposit waiting behind suspension rejects after the shared lock, without a receipt/key or balance change.
 
 Frontend formatting, lint/type checks, **44 unit tests**, and production build passed. The source-built Compose stack at `http://localhost:13000` passed **8 browser acceptance tests**, including the complete account/wallet workflow, original-state administrative retry after lost response with one audit, frozen-wallet committed funding recovery, new financial rejection, suspension/login denial, reactivation with fresh login, independent unfreezing, pagination and customer access denial. Product-native T3 preview reviewed administrative details/history and target/reason/consequence confirmations. Existing Compose configuration and PostgreSQL data were retained. See [admin acceptance](admin-freezing-acceptance.md) and [merchant/refund acceptance](merchant-payments-acceptance.md).
+
+# 58. Phase 2 — Advanced Transaction Filtering
+
+## Contract
+
+Transaction history additionally accepts `minAmount`, `maxAmount`, and
+`counterpartyWalletId`. Amount bounds are inclusive NPR decimals from 0 through
+1,000,000 with at most two decimal places; minimum cannot exceed maximum. An
+exact counterparty wallet UUID matches either direction between that wallet and
+the signed-in wallet. Deposits have no counterparty. Unknown, unrelated, or own
+wallet IDs produce empty results without revealing whether a wallet exists.
+Every predicate, including counts and pagination, remains ownership-scoped.
+Type filtering includes merchant payments and refunds. Status filters use the
+stored transaction status: a refunded payment still has SUCCESS status, with a
+separate REFUND transaction. Filters combine with AND and are bookmarked in the
+URL; changing filters resets the page. Advanced inputs apply together after
+validation. No participant identity search or cross-account administration is
+included in this slice.
+
+## Validation — 2026-10-01
+
+Validation on 2026-10-01: backend `./mvnw spring-javaformat:apply verify` passed
+218 tests, including 29 PostgreSQL transaction-history cases and the complete
+admin/freezing and merchant/refund regressions. Frontend formatter, lint/type
+checks, all 46 unit tests, and production build passed. All 10 browser acceptance
+tests passed against the source-rebuilt Compose/Nginx stack at
+`http://localhost:13000`. T3 interactive verification confirmed amount bounds,
+invalid-range rejection without URL changes, correction of either bound, unknown
+counterparty empty results, and clearing filters. Existing container settings,
+ports and the `payflow_postgres_data` volume were preserved.
+
+See [transaction filtering acceptance](transaction-filtering-acceptance.md).

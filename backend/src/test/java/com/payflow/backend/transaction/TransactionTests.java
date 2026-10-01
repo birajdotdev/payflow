@@ -193,11 +193,50 @@ class TransactionTests {
 
     @ParameterizedTest
     @ValueSource(strings = { "page=-1", "page=abc", "page=2147483647", "size=0", "size=-1", "size=101", "size=abc",
-            "type=OTHER", "status=OTHER", "fromDate=invalid", "toDate=2026-09-01", "fromDate=2026-09-01T00:00:00" })
+            "minAmount=-1", "maxAmount=1000000.01", "minAmount=1.001", "maxAmount=abc", "counterpartyWalletId=bad-id",
+            "counterpartyWalletId=1-1-1-1-1", "type=OTHER", "status=OTHER", "fromDate=invalid", "toDate=2026-09-01",
+            "fromDate=2026-09-01T00:00:00" })
     void rejectsInvalidFiltersAndPagination(String pair) throws Exception {
         var parts = pair.split("=", 2);
         history(token, parts[0], parts[1]).andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void amountBoundsAreInclusiveAndCombineWithCounterpartyAndPagination() throws Exception {
+        transfer(token, bobId, "25.25", "Lower boundary", "lower").andExpect(status().isOk());
+        transfer(bob, aliceId, "50", "Upper boundary", "upper").andExpect(status().isOk());
+        transfer(token, walletId(carol), "40", "Unrelated counterparty", "other").andExpect(status().isOk());
+        var before = jdbc.queryForList("SELECT * FROM transactions ORDER BY id");
+        history(token, "minAmount", "25.25", "maxAmount", "50", "counterpartyWalletId", bobId, "type", "TRANSFER",
+                "status", "SUCCESS", "size", "1")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(2))
+            .andExpect(jsonPath("$.data.content.length()").value(1));
+        history(token, "minAmount", "25.25", "maxAmount", "25.25", "counterpartyWalletId", bobId)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(1))
+            .andExpect(jsonPath("$.data.content[0].description").value("Lower boundary"));
+        history(bob, "minAmount", "25.25", "maxAmount", "50", "counterpartyWalletId", aliceId)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(2));
+        history(token, "minAmount", "50", "maxAmount", "25.25").andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForList("SELECT * FROM transactions ORDER BY id")).isEqualTo(before);
+    }
+
+    @Test
+    void counterpartyFiltersNeverRevealOtherWalletActivityOrDeposits() throws Exception {
+        for (String target : new String[] { aliceId, walletId(carol), "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }) {
+            history(token, "counterpartyWalletId", target).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0))
+                .andExpect(jsonPath("$.data.content").isEmpty());
+        }
+        history(carol, "counterpartyWalletId", bobId).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(0));
+        history(token, "counterpartyWalletId", bobId, "type", "DEPOSIT").andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(0));
+        history(token, "minAmount", "0", "maxAmount", "1000000").andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.totalElements").value(2));
     }
 
     @Test
@@ -238,7 +277,7 @@ class TransactionTests {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.paths['/api/v1/transactions'].get.security[0].bearerAuth").exists())
             .andExpect(jsonPath("$.paths['/api/v1/transactions/{id}'].get.security[0].bearerAuth").exists())
-            .andExpect(jsonPath("$.paths['/api/v1/transactions'].get.parameters.length()").value(6));
+            .andExpect(jsonPath("$.paths['/api/v1/transactions'].get.parameters.length()").value(9));
     }
 
     private ResultActions history(String bearer, String... params) throws Exception {
