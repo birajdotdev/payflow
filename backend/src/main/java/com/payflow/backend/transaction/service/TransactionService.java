@@ -1,5 +1,6 @@
 package com.payflow.backend.transaction.service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -33,13 +34,20 @@ public class TransactionService {
     private final TransactionRepository transactions;
 
     public TransactionPage history(TransactionType type, TransactionStatus status, Instant fromDate, Instant toDate,
-            int page, int size) {
+            BigDecimal minAmount, BigDecimal maxAmount, UUID counterpartyWalletId, int page, int size) {
         UUID walletId = currentWalletId();
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
                 || (fromDate != null && toDate != null && !fromDate.isBefore(toDate))) {
             throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
                     "Page must be nonnegative with a supported offset, size must be 1 to 100, and fromDate must precede toDate.");
         }
+        validateAmount(minAmount);
+        validateAmount(maxAmount);
+        if (minAmount != null && maxAmount != null && minAmount.compareTo(maxAmount) > 0) {
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                    "Minimum amount must not exceed maximum amount.");
+        }
+
         var results = transactions.findAll((root, query, builder) -> {
             var predicates = new ArrayList<Predicate>();
             // Ownership is part of the SQL predicate, including the pagination count
@@ -54,6 +62,21 @@ public class TransactionService {
                 predicates.add(builder.greaterThanOrEqualTo(root.get("createdAt"), fromDate));
             if (toDate != null)
                 predicates.add(builder.lessThan(root.get("createdAt"), toDate));
+            if (minAmount != null)
+                predicates.add(builder.greaterThanOrEqualTo(root.get("amount"), minAmount));
+            if (maxAmount != null)
+                predicates.add(builder.lessThanOrEqualTo(root.get("amount"), maxAmount));
+            if (counterpartyWalletId != null) {
+                predicates.add(builder.or(
+                        builder.and(builder.equal(root.get("senderWalletId"), walletId),
+                                builder.equal(root.get("receiverWalletId"), counterpartyWalletId)),
+                        builder.and(builder.equal(root.get("receiverWalletId"), walletId),
+                                builder.equal(root.get("senderWalletId"), counterpartyWalletId))));
+                // A deposit or a self-target is never a counterparty match.
+                predicates.add(builder.notEqual(root.get("type"), TransactionType.DEPOSIT));
+                if (counterpartyWalletId.equals(walletId))
+                    predicates.add(builder.disjunction());
+            }
             return builder.and(predicates.toArray(Predicate[]::new));
         }, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")));
         return TransactionPage.from(results);
@@ -79,6 +102,14 @@ public class TransactionService {
                 : transactions.findBySenderWalletIdAndTypeAndIdempotencyKey(walletId, operation, key);
         return result.map(t -> new OperationOutcome("FOUND", TransactionResponse.from(t)))
             .orElseGet(() -> new OperationOutcome("UNKNOWN", null));
+    }
+
+    private void validateAmount(BigDecimal amount) {
+        if (amount != null
+                && (amount.signum() < 0 || amount.compareTo(new BigDecimal("1000000")) > 0 || amount.scale() > 2)) {
+            throw new FinancialException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
+                    "Amount bounds must be 0 to 1000000 NPR with at most two decimal places.");
+        }
     }
 
     private UUID currentWalletId() {

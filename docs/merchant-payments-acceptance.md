@@ -138,3 +138,21 @@ The browser acceptance also commits a refund and drops its response, reloads the
 
 
 Validation recorded on 2026-09-30: backend formatting and `./mvnw verify` passed 181 tests, including 38 merchant payment/refund cases; frontend format/lint/type checks, 42 unit tests, and production build passed. All 7 browser tests passed on the source-rebuilt Compose stack at `http://localhost:13000`. Interactive T3 preview also verified confirmation details and both linked receipts.
+
+
+## Administrative availability controls
+
+The [admin/freezing acceptance scenario](admin-freezing-acceptance.md) exercises the real ADMIN controls that suspend participants and freeze wallets. New merchant payments/refunds re-read participant account state while holding the shared financial wallet locks. Account suspension and wallet freezing serialize against those same locks; no partial financial changes or keys survive rejection. Same-key committed payment/refund receipts remain recoverable by an active authenticated initiator after counterparties become unavailable. Suspension revokes all sessions; reactivation requires a fresh login, and does not unfreeze the wallet. The admin suite extends merchant/refund concurrency and rollback coverage without replacing these original acceptance cases.
+
+Combined validation on 2026-09-30: backend formatter/verify passed 210 tests, frontend checks passed 44 unit tests and production build, and all 8 browser tests passed on the source-rebuilt Compose stack at `http://localhost:13000`, retaining its existing configuration and database volume.
+
+
+## Transaction filter regression — 2026-10-01
+
+Ordinary history now provides Merchant payment and Refund type options, inclusive
+NPR amount bounds and exact counterparty wallet lookup. A refunded payment keeps
+its stored SUCCESS status; its separate REFUND receipt can be selected by type.
+The real-API browser scenario verifies both records with the same amount and
+counterparty filters. See [transaction filtering acceptance](transaction-filtering-acceptance.md).
+All 10 browser tests and 218 backend tests passed, including existing payment,
+refund, lost-response recovery and admin/freezing coverage.

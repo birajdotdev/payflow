@@ -410,8 +410,17 @@ second command. All history parameters are optional and combine with AND:
 | `status` | `PENDING`, `SUCCESS`, `FAILED`, or `REFUNDED` |
 | `fromDate` | Inclusive ISO-8601 timestamp with timezone |
 | `toDate` | Exclusive ISO-8601 timestamp with timezone; must follow `fromDate` |
+| `minAmount` / `maxAmount` | Inclusive NPR bounds, 0–1,000,000 with at most two decimal places; minimum ≤ maximum |
+| `counterpartyWalletId` | Exact wallet UUID in either direction; excludes deposits and own-wallet targets |
 | `page` | Zero-based nonnegative page, default 0; page × size cannot exceed 2,147,483,647 |
 | `size` | 1–100, default 20 |
+
+The browser exposes these bounds and counterparty lookup under **Filters**.
+Use **Apply advanced filters** to apply the three inputs together. Applied filters
+are preserved in the URL, reloads, and browser back/forward; changes reset the
+page while retaining page size. Unknown or unrelated counterparty IDs return an
+empty result without revealing wallet existence. Stored `SUCCESS` status includes
+payments later refunded; select `REFUND` type to view the separate refund records.
 
 History returns HTTP 200 with `data.content` containing receipts, plus `data.page`,
 `size`, `totalElements`, `totalPages`, and `hasNext`. Empty or out-of-range pages
@@ -513,7 +522,7 @@ collide after normalization, resolve those records before applying V2.
 The wallet has a nonnegative balance constraint and an optimistic version column.
 Deposits add pessimistic row locking as described above.
 
-Phase 2 merchant profiles, payment requests, customer payments, and receipts/dashboard are implemented. Refunds, admin tooling, and cloud deployment remain future milestones. See the [merchant acceptance scenario](docs/merchant-payments-acceptance.md).
+Phase 2 merchant profiles, payment requests, customer payments, full refunds, receipts/dashboard, focused admin/freezing tooling, and transaction amount/counterparty filtering are implemented. Cloud deployment and other Phase 2 features remain future milestones. See the [merchant acceptance scenario](docs/merchant-payments-acceptance.md).
 
 Authentication cookie examples (use HTTPS and the trusted frontend origin configured above):
 
@@ -606,3 +615,47 @@ Receiving merchants can fully refund a successful merchant payment from its shar
 Wallet locks, transaction boundaries, unique constraints, and a PostgreSQL reversal constraint guarantee one refund per payment. Insufficient merchant funds, frozen wallets, unavailable participants, and balance limits reject the refund without partial changes. Same-key retries return the committed refund; a different key after refund gets `PAYMENT_ALREADY_REFUNDED`; a key reused for another payment gets `IDEMPOTENCY_CONFLICT`.
 
 After a lost response, reload preserves the original key/payment identity. **Check outcome** uses merchant-scoped `GET /api/v1/transactions/outcome?operation=REFUND&key=...`; **Retry original request** explicitly retries the same key. UNKNOWN never proves failure, and no financial POST is automatically replayed. See [refund acceptance](docs/merchant-payments-acceptance.md#full-merchant-refund).
+
+
+## Administration and account/wallet availability
+
+An ADMIN sees **Administration** in the sidebar and opens `/admin`. The Accounts and Wallets tabs use the shared paginated table. **View details** shows the owner, contact details, role, account/wallet state, balance, timestamps and paginated status audit history. Suspend/reactivate and freeze/unfreeze confirmations identify the target UUID, action, reason and consequences. A reason is required. Customer/merchant accounts see an access-denied state and cannot call the administrative APIs.
+
+Provision an administrator only through local operator access, after registering an account normally:
+
+```bash
+scripts/provision-demo-admin.sh your-local-demo-account@example.com
+```
+
+The command runs against the existing `payflow-postgres` container (override `PAYFLOW_POSTGRES_CONTAINER` for another local container). It accepts only an existing ACTIVE USER or already provisioned ADMIN; it does not create accounts/passwords or elevate merchants/suspended accounts. It uses quoted SQL parameters, shares the administrative advisory lock and target wallet/account locks, and revokes old sessions when promoting. Sign in again using the registered password. Repeating provisioning for an existing active ADMIN does nothing. There is no startup/default administrator, public provisioning endpoint, or public role selection. Treat this as a local/demo operator command, not a production provisioning workflow.
+
+| API (ADMIN only) | Contract |
+| --- | --- |
+| `GET /api/v1/admin/accounts` / `wallets` | `page=0&size=20`, size 1–100; creation time/UUID descending |
+| `GET /api/v1/admin/accounts/{id}` / `wallets/{id}` | Target and owner detail with paginated audit history; same page/size parameters |
+| `PUT /api/v1/admin/accounts/{id}/status` | `{ "status": "ACTIVE" or "SUSPENDED", "reason": "..." }` |
+| `PUT /api/v1/admin/wallets/{id}/status` | `{ "status": "ACTIVE" or "FROZEN", "reason": "..." }` |
+
+Reasons are trimmed, nonblank and at most 500 characters; extra status-request fields are rejected. Repeated setting of the same state succeeds without another audit or timestamp/version change. Actual changes atomically record actor, target, previous/new state, reason and UTC time. Audits have no update/delete API and PostgreSQL rejects their update/delete. Audit insertion failure rolls back the target and all session revocations. Self-suspension is rejected (`SELF_SUSPENSION`); serialized administrator changes preserve the last active ADMIN (`LAST_ACTIVE_ADMIN`).
+
+Suspension revokes every session and blocks login, refresh and existing bearer tokens. Reactivation requires a new login and never restores old sessions. Account and wallet states are independent. A frozen wallet can read balances/history/receipts but cannot participate in new deposits, transfers, merchant payments or refunds. New operations recheck account availability under the same UUID-ordered wallet locks used by status changes. Financial-first operations can commit; freeze/suspension-first operations reject without partial changes. Committed keys still return the original receipt for an active authenticated caller, even when a participant is subsequently unavailable. Suspended callers must be reactivated and sign in again; session loss clears private browser caches/intents, while receipts and server idempotency keys remain available in history and recovery APIs.
+
+See [admin/freezing acceptance](docs/admin-freezing-acceptance.md). Validation on 2026-09-30: backend formatting/verify and production JAR passed 210 tests (29 admin PostgreSQL cases); frontend formatting/lint/type checks, 44 unit tests and production build passed; all 8 browser tests passed on the rebuilt stack at `http://localhost:13000`. T3 preview inspected details/history and confirmations. Notifications and unrelated Phase 2 work remain deferred. Focused transaction amount/counterparty filtering is documented below.
+
+
+### Advanced transaction filtering
+
+Amount bounds, exact counterparty lookup and merchant-payment/refund type filters
+are implemented with ownership-scoped SQL counts, URL-backed pagination,
+TanStack Form validation and accessible empty/error states. See
+[transaction filtering acceptance](docs/transaction-filtering-acceptance.md).
+
+Validation on 2026-10-01: backend `./mvnw spring-javaformat:apply verify` passed
+218 tests, including 29 PostgreSQL transaction-history cases and the complete
+admin/freezing and merchant/refund regressions. Frontend formatter, lint/type
+checks, all 46 unit tests, and production build passed. All 10 browser acceptance
+tests passed against the source-rebuilt Compose/Nginx stack at
+`http://localhost:13000`. T3 interactive verification confirmed amount bounds,
+invalid-range rejection without URL changes, correction of either bound, unknown
+counterparty empty results, and clearing filters. Existing container settings,
+ports and the `payflow_postgres_data` volume were preserved.

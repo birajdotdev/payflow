@@ -7,6 +7,7 @@ import {
   WalletCards,
   UserRound,
   Store,
+  ShieldCheck,
 } from 'lucide-react'
 
 import { Brand } from '@/components/brand'
@@ -85,6 +86,22 @@ export function AppSidebar({
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
+                {user.role === 'ADMIN' && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={pathname === '/admin'}
+                      render={
+                        <Link
+                          to="/admin"
+                          onClick={() => setOpenMobile(false)}
+                        />
+                      }
+                    >
+                      <ShieldCheck />
+                      <span>Administration</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </nav>
           </SidebarGroupContent>

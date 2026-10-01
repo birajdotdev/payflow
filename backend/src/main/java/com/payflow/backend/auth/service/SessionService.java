@@ -52,6 +52,10 @@ public class SessionService {
 
     @Transactional
     public Result create(User user) {
+        // Serialize session creation with account suspension and recheck persisted state.
+        user = users.findByIdForUpdate(user.getId())
+            .filter(u -> u.getStatus() == UserStatus.ACTIVE)
+            .orElseThrow(SessionService::invalid);
         Instant now = clock.instant();
         LoginSession session = sessions.save(new LoginSession(user.getId(), now, now.plus(properties.absoluteTtl()),
                 now.plus(properties.idleTtl().compareTo(properties.absoluteTtl()) < 0 ? properties.idleTtl()

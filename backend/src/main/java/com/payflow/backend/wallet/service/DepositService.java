@@ -26,6 +26,8 @@ public class DepositService {
 
     private final WalletRepository wallets;
 
+    private final WalletAvailability availability;
+
     private final TransactionRepository transactions;
 
     @Transactional
@@ -53,6 +55,8 @@ public class DepositService {
             }
             return DepositResponse.from(transaction);
         }
+        availability.requireActive(wallet);
+
         wallet.creditDeposit(amount.setScale(2));
         // Flush the balance first so a subsequent record failure exercises real DB
         // rollback.

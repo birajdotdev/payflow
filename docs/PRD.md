@@ -2,7 +2,7 @@
 
 ## PayFlow — Digital Wallet & Payment Platform
 
-**Document Version:** 1.5\
+**Document Version:** 1.6\
 **Last Updated:** 2026-09-30\
 **Product Type:** Fintech / Digital Wallet Platform  
 **Primary Objective:** Portfolio and learning project demonstrating production-oriented Java Spring Boot backend development  
@@ -619,6 +619,9 @@ status
 type
 fromDate
 toDate
+minAmount
+maxAmount
+counterpartyWalletId
 page
 size
 ```
@@ -766,54 +769,25 @@ Date: Sep 25, 2026
 
 ---
 
-# 24. Admin Dashboard
+# 24. Administration and availability (Phase 2)
 
-Administrators should be able to view:
+The focused `/admin` slice provides ADMIN-only paginated account/wallet lists and detail dialogs. `GET /api/v1/admin/accounts[/{id}]` and `GET /api/v1/admin/wallets[/{id}]` use zero-based page/size (default 0/20, size 1–100), newest creation then UUID descending. Details include contact/role/account state, wallet identity/balance/state, timestamps, and status audit history. Passwords, tokens and session identifiers are never exposed.
 
-```text
-Total users
-Active users
-Merchants
-Total transactions
-Successful transactions
-Failed transactions
-Transaction volume
-Recent transactions
-```
+`PUT /api/v1/admin/accounts/{id}/status` sets ACTIVE or SUSPENDED; `PUT /api/v1/admin/wallets/{id}/status` sets ACTIVE or FROZEN. Both accept only `status` and a trimmed nonblank reason of at most 500 characters. No public API selects ADMIN or changes caller-selected account roles, balances, or ownership. Repeating the current state succeeds without changing timestamps or creating another audit record. Reactivation does not unfreeze a wallet; unfreezing does not reactivate an account.
 
-The dashboard exists primarily to demonstrate backend aggregation and administrative APIs.
+Suspension rejects login with the generic credential error, revokes every session atomically, and causes subsequent access-token and refresh checks to return 401. Reactivation requires a fresh login and never revives revoked sessions. Frozen wallets retain authenticated read access to history, receipts and recovery; new deposits, transfers, payments and refunds involving either unavailable participant fail without reserving a key or partially changing money. A new operation checks current account state after obtaining wallet locks. Matching committed keys return original receipts before availability checks, provided the caller is currently authenticated; suspended callers must first be reactivated and sign in again. Read-only outcome lookup remains ownership scoped.
+
+Financial operations hold wallet locks in UUID order through commit. Administrative state changes lock the target's primary wallet before changing its account or wallet state. Whichever operation obtains that wallet lock first determines the outcome: a financial operation may commit before suspension/freezing, otherwise it rechecks availability and rejects. This does not undo committed operations. Session creation also locks/rechecks the account so a concurrent login cannot create a live session after suspension. Administrator state changes share a transaction-scoped PostgreSQL advisory lock, recheck the actor's current role/state, prohibit self-suspension, and preserve at least one ACTIVE ADMIN. Opposing administrator suspensions cannot lock out the platform. Local provisioning uses an explicit operator-only command for an existing active USER; public signup always assigns USER.
+
+Confirmation dialogs identify the target by name/email and UUID, desired action, reason and consequences. Server authorization is authoritative. Advanced admin filtering, email notifications, aggregation dashboards, and unrelated Phase 2 features remain deferred. User transaction amount/counterparty filtering is defined in section 58.
 
 ---
 
-# 25. Audit Logging
+# 25. Administrative audit logging
 
-Important actions shall be auditable.
+Every actual administrative state transition inserts an immutable audit row in the same database transaction as the target update and session revocation. It contains audit UUID, actor account UUID, resource type (ACCOUNT/WALLET), target UUID, previous/new state, trimmed reason, and UTC timestamp. Failed updates/audit inserts roll back all changes. No-op requests add no row. ADMIN detail reads expose the relevant history; no API edits/deletes audits. PostgreSQL constraints validate state transitions, reasons and actor/target references, and a trigger prevents audit updates/deletes.
 
-Examples include:
-
-```text
-User login
-Account suspension
-Wallet freeze
-Money transfer
-Merchant payment
-Refund
-Administrative action
-```
-
-An audit record may contain:
-
-```text
-auditId
-actorId
-action
-resourceType
-resourceId
-timestamp
-metadata
-```
-
-Audit records should not be editable by regular users.
+Other audit categories (login, notifications, general platform activity) remain later work; financial receipts retain their existing immutable history.
 
 ---
 
@@ -1066,13 +1040,15 @@ POST /payments/{paymentRequestId}/pay
 GET  /payments/{paymentRequestId}
 ```
 
-Admin:
+Admin (implemented; aggregation/transaction oversight deferred):
 
 ```text
-GET   /admin/users
-GET   /admin/transactions
-PATCH /admin/users/{id}/status
-GET   /admin/dashboard
+GET /api/v1/admin/accounts
+GET /api/v1/admin/accounts/{id}
+PUT /api/v1/admin/accounts/{id}/status
+GET /api/v1/admin/wallets
+GET /api/v1/admin/wallets/{id}
+PUT /api/v1/admin/wallets/{id}/status
 ```
 
 ---
@@ -1834,19 +1810,9 @@ Everything beyond this is secondary.
 
 # 46. Phase 2
 
-After the MVP is stable:
+Implemented after the MVP: merchant accounts, merchant payment requests, shared payment/refund receipts, full refunds, paginated admin account/wallet tooling, account suspension/reactivation, wallet freezing/unfreezing, and atomic administrative status audits.
 
-```text
-Merchant accounts
-Merchant payment requests
-Payment receipts
-Refunds
-Admin dashboard
-Account freezing
-Advanced transaction filtering
-Audit logs
-Email notifications
-```
+Implemented: focused transaction amount ranges and exact counterparty wallet filtering (section 58). Deferred: aggregate admin dashboard, broader activity audit logs, and email notifications.
 
 ---
 
@@ -1973,7 +1939,7 @@ A useful architecture diagram should also be included.
 
 **PayFlow — Digital Wallet & Payment Platform**
 
-Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transfer confirmation, transaction history and receipts. Phase 2 now includes merchant enrollment, payment requests, customer payments, and shared merchant-payment receipts.
+Developed a full-stack fintech wallet platform using **Java Spring Boot, React, TypeScript, TanStack Router, TanStack Query, TanStack Form, Zod, Axios, Tailwind CSS, shadcn/ui, Vite+ and PostgreSQL**, implementing short-lived JWT authentication with HttpOnly refresh cookies and backend sessions, wallet-to-wallet transfers, transfer confirmation, transaction history and receipts. Phase 2 now includes merchant enrollment, payment requests, customer payments, full refunds, shared receipts, admin account/wallet controls and atomic status audits.
 
 Implemented **atomic financial transactions, BigDecimal-based monetary calculations, idempotent payment requests and concurrency controls** to prevent duplicate transactions and inconsistent wallet balances.
 
@@ -2086,7 +2052,7 @@ The session/history browser cases simulate expiry responses at the browser API b
 
 ## Remaining Post-MVP Work
 
-- Remaining Phase 2 work: admin tooling, account freezing, advanced filtering/audit logs, and email notifications. Merchant profiles, requests, payment, and receipts/dashboard are implemented in section 56.
+- Remaining Phase 2 work: advanced filtering, aggregation dashboards, broader activity audit logs, and email notifications. Merchant profiles, requests, payment, full refunds and receipts/dashboard are implemented in section 56. Focused admin tooling, account suspension, wallet freezing and status auditing are implemented in sections 24–25 and validated below.
 - Phase 3 caching, messaging, observability, rate limiting, Kubernetes, and cloud deployment.
 - Security enhancements from section 47: complex cross-tab coordination, strict refresh rotation/token-family reuse detection, advanced lost-response/race recovery, session-management UI, and logout-all-devices.
 - Separate-origin browser hosting would require explicit credentialed CORS/preflight configuration and tests; the shipped MVP uses same-origin API forwarding.
@@ -2123,3 +2089,44 @@ Validation for this slice: `./mvnw verify` passed all 168 backend tests (includi
 ## Merchant Refund Slice Validation — 2026-09-30
 
 Full merchant refunds are implemented with Flyway V7, immutable original payments and linked refund receipts, merchant-only confirmation, and persisted explicit recovery. `./mvnw verify` passed all 181 backend tests (38 merchant payment/refund cases). Frontend `pnpm exec vp check`, all 42 unit tests, and `pnpm exec vp build` passed. All 7 browser tests passed against the source-rebuilt Compose/Nginx stack at `http://localhost:13000`, including lost-response payment and refund recovery. T3 collaborative preview verification confirmed the amount/recipient dialog, successful refund, and original/refund receipt links.
+
+
+# 57. Phase 2 — Administration and Freezing
+
+## Validation — 2026-09-30
+
+The focused administration/freezing slice is implemented. Backend formatter and `./mvnw verify` passed **210 tests**, including **29 PostgreSQL admin cases** covering authorization, pagination/privacy, irreversible session revocation, independent status transitions/no-ops, self/last-admin safeguards, duplicate/opposing admin races, unavailable financial participants, committed receipt recovery, shared wallet-lock ordering, and injected audit failure rollback. Real PostgreSQL advisory gates pause operations after wallet flush or before audit insertion to prove both financial-first and freeze/suspension-first outcomes. An already-authenticated deposit waiting behind suspension rejects after the shared lock, without a receipt/key or balance change.
+
+Frontend formatting, lint/type checks, **44 unit tests**, and production build passed. The source-built Compose stack at `http://localhost:13000` passed **8 browser acceptance tests**, including the complete account/wallet workflow, original-state administrative retry after lost response with one audit, frozen-wallet committed funding recovery, new financial rejection, suspension/login denial, reactivation with fresh login, independent unfreezing, pagination and customer access denial. Product-native T3 preview reviewed administrative details/history and target/reason/consequence confirmations. Existing Compose configuration and PostgreSQL data were retained. See [admin acceptance](admin-freezing-acceptance.md) and [merchant/refund acceptance](merchant-payments-acceptance.md).
+
+# 58. Phase 2 — Advanced Transaction Filtering
+
+## Contract
+
+Transaction history additionally accepts `minAmount`, `maxAmount`, and
+`counterpartyWalletId`. Amount bounds are inclusive NPR decimals from 0 through
+1,000,000 with at most two decimal places; minimum cannot exceed maximum. An
+exact counterparty wallet UUID matches either direction between that wallet and
+the signed-in wallet. Deposits have no counterparty. Unknown, unrelated, or own
+wallet IDs produce empty results without revealing whether a wallet exists.
+Every predicate, including counts and pagination, remains ownership-scoped.
+Type filtering includes merchant payments and refunds. Status filters use the
+stored transaction status: a refunded payment still has SUCCESS status, with a
+separate REFUND transaction. Filters combine with AND and are bookmarked in the
+URL; changing filters resets the page. Advanced inputs apply together after
+validation. No participant identity search or cross-account administration is
+included in this slice.
+
+## Validation — 2026-10-01
+
+Validation on 2026-10-01: backend `./mvnw spring-javaformat:apply verify` passed
+218 tests, including 29 PostgreSQL transaction-history cases and the complete
+admin/freezing and merchant/refund regressions. Frontend formatter, lint/type
+checks, all 46 unit tests, and production build passed. All 10 browser acceptance
+tests passed against the source-rebuilt Compose/Nginx stack at
+`http://localhost:13000`. T3 interactive verification confirmed amount bounds,
+invalid-range rejection without URL changes, correction of either bound, unknown
+counterparty empty results, and clearing filters. Existing container settings,
+ports and the `payflow_postgres_data` volume were preserved.
+
+See [transaction filtering acceptance](transaction-filtering-acceptance.md).

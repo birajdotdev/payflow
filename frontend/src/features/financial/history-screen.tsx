@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { useState } from 'react'
 
 import { DataTable } from '@/components/data-table'
 import { ErrorNotice } from '@/components/feedback'
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useSession } from '@/features/auth/session'
+import { HistoryAdvancedFilters } from '@/features/financial/history-advanced-filters'
 import { walletQuery } from '@/features/wallet/queries'
 import type { TransactionPage } from '@/features/wallet/queries'
 import { request } from '@/lib/api'
@@ -42,6 +44,8 @@ const typeItems = [
   { value: 'all', label: 'All types' },
   { value: 'DEPOSIT', label: 'Deposit' },
   { value: 'TRANSFER', label: 'Transfer' },
+  { value: 'MERCHANT_PAYMENT', label: 'Merchant payment' },
+  { value: 'REFUND', label: 'Refund' },
 ]
 const statusItems = [
   { value: 'all', label: 'All statuses' },
@@ -83,9 +87,19 @@ function FilterSelect({
   )
 }
 export function HistoryScreen() {
+  const [filterReset, setFilterReset] = useState(0)
   const user = useSession().user!
   const params = routeApi.useSearch()
   const navigate = routeApi.useNavigate()
+  const filtered = !!(
+    params.type ||
+    params.status ||
+    params.fromDate ||
+    params.toDate ||
+    params.minAmount ||
+    params.maxAmount ||
+    params.counterpartyWalletId
+  )
   const wallet = useQuery(walletQuery(user.userId))
   const query = useQuery({
     queryKey: ['private', user.userId, 'transactions', params],
@@ -101,7 +115,8 @@ export function HistoryScreen() {
             Transaction history
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Every deposit and transfer, with a receipt for each.
+            Deposits, transfers, merchant payments, and refunds with a receipt
+            for each.
           </p>
         </div>
         <Button
@@ -115,7 +130,7 @@ export function HistoryScreen() {
           Refresh
         </Button>
       </div>
-      <Collapsible>
+      <Collapsible defaultOpen={filtered}>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -123,9 +138,9 @@ export function HistoryScreen() {
               Filters
             </CardTitle>
             <CardDescription>
-              {params.type || params.status || params.fromDate || params.toDate
+              {filtered
                 ? 'Filters applied. Adjust your view below.'
-                : 'Narrow your history by type, status, or date.'}
+                : 'Narrow your history by type, status, date, amount, or counterparty.'}
             </CardDescription>
             <CardAction>
               <CollapsibleTrigger
@@ -150,7 +165,10 @@ export function HistoryScreen() {
                         ...prev,
                         page: 0,
                         type:
-                          value === 'DEPOSIT' || value === 'TRANSFER'
+                          value === 'DEPOSIT' ||
+                          value === 'TRANSFER' ||
+                          value === 'MERCHANT_PAYMENT' ||
+                          value === 'REFUND'
                             ? value
                             : undefined,
                       }),
@@ -209,11 +227,41 @@ export function HistoryScreen() {
                   </Field>
                 ))}
               </FieldGroup>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Completed includes payments that were later refunded. Choose
+                Refund to see refund transactions.
+              </p>
+              <HistoryAdvancedFilters
+                key={JSON.stringify([
+                  params.minAmount,
+                  params.maxAmount,
+                  params.counterpartyWalletId,
+                  filterReset,
+                ])}
+                initial={{
+                  minAmount: params.minAmount ?? '',
+                  maxAmount: params.maxAmount ?? '',
+                  counterpartyWalletId: params.counterpartyWalletId ?? '',
+                }}
+                apply={(values) => {
+                  void navigate({
+                    search: (previous) => ({
+                      ...previous,
+                      page: 0,
+                      minAmount: values.minAmount || undefined,
+                      maxAmount: values.maxAmount || undefined,
+                      counterpartyWalletId:
+                        values.counterpartyWalletId || undefined,
+                    }),
+                  })
+                }}
+              />
               <div className="mt-4 flex justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    setFilterReset((previous) => previous + 1)
                     void navigate({ search: { page: 0, size: params.size } })
                   }}
                 >
@@ -264,6 +312,7 @@ export function HistoryScreen() {
             />
           ) : (
             <DataTable
+              filtered={filtered}
               data={query.data?.content}
               walletId={wallet.data?.walletId}
               loading={query.isPending}

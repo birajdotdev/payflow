@@ -187,3 +187,47 @@ test('expired startup session preserves the profile return destination', async (
     page.getByRole('heading', { name: 'Your profile' })
   ).toBeVisible()
 })
+
+test('advanced filters validate drafts and preserve combined bookmarks', async ({
+  page,
+}) => {
+  const state = await fixture(page)
+  await page.goto('/transactions?page=1&size=5&type=MERCHANT_PAYMENT')
+  await expect(page.getByText('PAGE-1-ROW-0', { exact: true })).toBeVisible()
+  await page.getByLabel('Minimum amount').fill('50')
+  await page.getByLabel('Maximum amount').fill('25')
+  await page.getByRole('button', { name: 'Apply advanced filters' }).click()
+  await expect(page.getByRole('alert')).toContainText(
+    'Minimum amount must not exceed'
+  )
+  expect(new URL(page.url()).searchParams.has('minAmount')).toBe(false)
+  await page.getByLabel('Minimum amount').fill('25')
+  await page.getByRole('button', { name: 'Apply advanced filters' }).click()
+  await expect.poll(() => state.queries.at(-1)?.get('minAmount')).toBe('25')
+  await page.getByLabel('Minimum amount').fill('50')
+  await page.getByLabel('Maximum amount').fill('100')
+  const walletId = '11111111-1111-4111-8111-111111111111'
+  await page.getByLabel('Counterparty wallet ID').fill(walletId)
+  await page.getByRole('button', { name: 'Apply advanced filters' }).click()
+  await expect
+    .poll(() => state.queries.at(-1)?.get('counterpartyWalletId'))
+    .toBe(walletId)
+  expect(state.queries.at(-1)?.get('minAmount')).toBe('50')
+  expect(state.queries.at(-1)?.get('maxAmount')).toBe('100')
+  expect(state.queries.at(-1)?.get('type')).toBe('MERCHANT_PAYMENT')
+  expect(state.queries.at(-1)?.get('page')).toBe('0')
+  const bookmark = page.url()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByText('PAGE-1-ROW-0', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(page.getByLabel('Minimum amount')).toHaveValue('')
+  await page.goBack()
+  await expect(page.getByLabel('Minimum amount')).toHaveValue('50')
+  await expect(page.getByLabel('Counterparty wallet ID')).toHaveValue(walletId)
+  await page.goto(bookmark)
+  await expect(page.getByLabel('Maximum amount')).toHaveValue('100')
+  await page.getByRole('combobox', { name: 'Type', exact: true }).click()
+  await page.getByRole('option', { name: 'Refund', exact: true }).click()
+  await expect.poll(() => state.queries.at(-1)?.get('type')).toBe('REFUND')
+  expect(state.queries.at(-1)?.get('counterpartyWalletId')).toBe(walletId)
+})

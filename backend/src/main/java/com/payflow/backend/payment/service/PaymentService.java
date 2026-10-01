@@ -18,6 +18,7 @@ import com.payflow.backend.user.entity.*;
 import com.payflow.backend.wallet.entity.Wallet;
 import com.payflow.backend.wallet.repository.WalletRepository;
 import com.payflow.backend.wallet.service.DepositService;
+import com.payflow.backend.wallet.service.WalletAvailability;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,8 @@ public class PaymentService {
     private final PaymentRequestRepository requests;
 
     private final WalletRepository wallets;
+
+    private final WalletAvailability availability;
 
     private final TransactionRepository transactions;
 
@@ -144,6 +147,8 @@ public class PaymentService {
         payable(p);
         active(m);
 
+        availability.requireActive(sender, receiver);
+
         if (receiver.getUser().getStatus() != UserStatus.ACTIVE || receiver.getUser().getRole() != UserRole.MERCHANT)
             throw new FinancialException(HttpStatus.CONFLICT, "MERCHANT_SUSPENDED", "Merchant is unavailable.");
 
@@ -205,6 +210,8 @@ public class PaymentService {
                     "Payment has already been refunded.");
 
         active(merchant);
+
+        availability.requireActive(sender, receiver);
 
         if (sender.getUser().getStatus() != UserStatus.ACTIVE || receiver.getUser().getStatus() != UserStatus.ACTIVE
                 || sender.getUser().getRole() != UserRole.MERCHANT

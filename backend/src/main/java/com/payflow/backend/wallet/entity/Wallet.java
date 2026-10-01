@@ -52,6 +52,10 @@ public class Wallet {
         this.user = Objects.requireNonNull(user, "Wallet owner is required");
     }
 
+    public void setStatus(WalletStatus status) {
+        this.status = status;
+    }
+
     public void creditDeposit(BigDecimal amount) {
         if (status != WalletStatus.ACTIVE) {
             throw new FinancialException(HttpStatus.CONFLICT, "WALLET_FROZEN", "Wallet is frozen.");
